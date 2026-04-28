@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>中国象棋</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="game-stage" aria-label="中国象棋棋盘">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Web Chinese Chess</p>
+            <h1>中国象棋</h1>
+          </div>
+          <div class="status-pill" id="gameStatus">准备开局</div>
+        </header>
+
+        <div class="board-wrap">
+          <div class="captured-row" id="capturedByBlack"></div>
+          <div class="board" id="board" role="grid" aria-label="中国象棋 9 路 10 线棋盘"></div>
+          <div class="captured-row" id="capturedByRed"></div>
+        </div>
+
+        <div class="mobile-actions">
+          <button id="hintBtnMobile" type="button">提示</button>
+          <button id="undoBtnMobile" type="button">悔棋</button>
+          <button id="resignBtnMobile" type="button">认输</button>
+        </div>
+      </section>
+
+      <aside class="side-panel" aria-label="对局控制与棋谱">
+        <section class="panel-section setup-panel">
+          <div class="section-title">
+            <span>新局设置</span>
+            <button class="ghost-button" id="newGameBtn" type="button">重开</button>
+          </div>
+          <div class="segmented" aria-label="选择阵营">
+            <button class="seg active" data-side="red" type="button">执红</button>
+            <button class="seg" data-side="black" type="button">执黑</button>
+          </div>
+          <div class="segmented" aria-label="AI 难度">
+            <button class="seg" data-difficulty="easy" type="button">简单</button>
+            <button class="seg active" data-difficulty="normal" type="button">普通</button>
+            <button class="seg" data-difficulty="hard" type="button">困难</button>
+          </div>
+          <button class="primary-button" id="startBtn" type="button">开始游戏</button>
+        </section>
+
+        <section class="panel-section">
+          <div class="section-title">
+            <span>局面</span>
+            <span id="timer">00:00</span>
+          </div>
+          <div class="info-grid">
+            <div>
+              <span>玩家</span>
+              <strong id="playerSideText">红方</strong>
+            </div>
+            <div>
+              <span>AI</span>
+              <strong id="aiSideText">黑方</strong>
+            </div>
+            <div>
+              <span>回合</span>
+              <strong id="turnText">红方</strong>
+            </div>
+            <div>
+              <span>难度</span>
+              <strong id="difficultyText">普通</strong>
+            </div>
+          </div>
+          <p class="message" id="message">选择设置后开始对局。</p>
+        </section>
+
+        <section class="panel-section desktop-actions">
+          <div class="section-title"><span>操作</span></div>
+          <div class="button-grid">
+            <button id="hintBtn" type="button">提示</button>
+            <button id="undoBtn" type="button">悔棋</button>
+            <button id="resignBtn" type="button">认输</button>
+            <button id="exportBtn" type="button">导出棋谱</button>
+          </div>
+          <label class="toggle-line">
+            <input id="soundToggle" type="checkbox" checked />
+            <span>音效</span>
+          </label>
+          <label class="toggle-line">
+            <input id="themeToggle" type="checkbox" />
+            <span>深色棋盘</span>
+          </label>
+        </section>
+
+        <section class="panel-section">
+          <div class="section-title">
+            <span>棋谱</span>
+            <span id="moveCount">0 手</span>
+          </div>
+          <ol class="move-list" id="moveList"></ol>
+        </section>
+
+        <section class="panel-section">
+          <div class="section-title"><span>棋子说明</span></div>
+          <p class="piece-help" id="pieceHelp">点击棋子查看走法说明。</p>
+        </section>
+      </aside>
+    </main>
+
+    <dialog id="resultDialog" class="result-dialog">
+      <h2 id="resultTitle">对局结束</h2>
+      <p id="resultSummary"></p>
+      <div class="dialog-actions">
+        <button id="closeResultBtn" type="button">查看棋谱</button>
+        <button id="againBtn" class="primary-button" type="button">再来一局</button>
+      </div>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
