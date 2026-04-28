@@ -40,6 +40,87 @@ const PIECE_VALUE = {
   soldier: 100,
 };
 
+const SEARCH_DEPTH = { easy: 1, normal: 2, hard: 4 };
+const QUIESCENCE_DEPTH = 3;
+const MATE_SCORE = 30000;
+const REPEATED_POSITION_PENALTY = 12000;
+const DIRECT_REVERSAL_PENALTY = 2600;
+const RECENT_ROUTE_PENALTY = 420;
+const CYCLE_FILTER_PENALTY = DIRECT_REVERSAL_PENALTY;
+
+const MOBILITY_VALUE = {
+  general: 0,
+  advisor: 1,
+  elephant: 1,
+  horse: 5,
+  chariot: 7,
+  cannon: 6,
+  soldier: 2,
+};
+
+const POSITION_BONUS = {
+  general: [
+    [0, 0, 0, 8, 12, 8, 0, 0, 0],
+    [0, 0, 0, 6, 10, 6, 0, 0, 0],
+    [0, 0, 0, 4, 8, 4, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 4, 8, 4, 0, 0, 0],
+    [0, 0, 0, 6, 10, 6, 0, 0, 0],
+    [0, 0, 0, 8, 12, 8, 0, 0, 0],
+  ],
+  chariot: [
+    [4, 8, 12, 14, 16, 14, 12, 8, 4],
+    [6, 10, 14, 18, 20, 18, 14, 10, 6],
+    [8, 12, 18, 24, 26, 24, 18, 12, 8],
+    [8, 14, 20, 26, 30, 26, 20, 14, 8],
+    [8, 14, 20, 28, 32, 28, 20, 14, 8],
+    [8, 14, 20, 28, 32, 28, 20, 14, 8],
+    [8, 14, 20, 26, 30, 26, 20, 14, 8],
+    [8, 12, 18, 24, 26, 24, 18, 12, 8],
+    [6, 10, 14, 18, 20, 18, 14, 10, 6],
+    [4, 8, 12, 14, 16, 14, 12, 8, 4],
+  ],
+  horse: [
+    [0, 4, 8, 10, 12, 10, 8, 4, 0],
+    [4, 8, 14, 18, 20, 18, 14, 8, 4],
+    [8, 14, 22, 28, 30, 28, 22, 14, 8],
+    [8, 16, 24, 32, 34, 32, 24, 16, 8],
+    [6, 14, 22, 30, 32, 30, 22, 14, 6],
+    [6, 14, 22, 30, 32, 30, 22, 14, 6],
+    [8, 16, 24, 32, 34, 32, 24, 16, 8],
+    [8, 14, 22, 28, 30, 28, 22, 14, 8],
+    [4, 8, 14, 18, 20, 18, 14, 8, 4],
+    [0, 4, 8, 10, 12, 10, 8, 4, 0],
+  ],
+  cannon: [
+    [2, 4, 6, 8, 10, 8, 6, 4, 2],
+    [4, 8, 10, 12, 14, 12, 10, 8, 4],
+    [6, 10, 16, 20, 22, 20, 16, 10, 6],
+    [6, 12, 18, 24, 28, 24, 18, 12, 6],
+    [6, 12, 18, 24, 28, 24, 18, 12, 6],
+    [6, 12, 18, 24, 28, 24, 18, 12, 6],
+    [6, 12, 18, 24, 28, 24, 18, 12, 6],
+    [6, 10, 16, 20, 22, 20, 16, 10, 6],
+    [4, 8, 10, 12, 14, 12, 10, 8, 4],
+    [2, 4, 6, 8, 10, 8, 6, 4, 2],
+  ],
+  soldier: [
+    [78, 84, 90, 96, 100, 96, 90, 84, 78],
+    [70, 76, 82, 88, 92, 88, 82, 76, 70],
+    [54, 60, 68, 74, 78, 74, 68, 60, 54],
+    [38, 44, 52, 58, 62, 58, 52, 44, 38],
+    [22, 28, 34, 40, 44, 40, 34, 28, 22],
+    [8, 10, 12, 14, 16, 14, 12, 10, 8],
+    [4, 6, 8, 10, 12, 10, 8, 6, 4],
+    [0, 2, 4, 6, 8, 6, 4, 2, 0],
+    [0, 0, 2, 4, 6, 4, 2, 0, 0],
+    [0, 0, 0, 2, 4, 2, 0, 0, 0],
+  ],
+};
+
 const HELP = {
   general: "帅/将在九宫内横竖走一格，且不能与对方将帅照面。",
   advisor: "仕/士只能在己方九宫内沿斜线走一格。",
@@ -94,6 +175,7 @@ let legalTargets = [];
 let hintMove = null;
 let aiTimer = null;
 let clockTimer = null;
+let dragState = null;
 
 function createGame(playerSide, difficulty) {
   const now = Date.now();
@@ -398,6 +480,11 @@ function executeMove(move, byAI = false) {
   legalTargets = [];
   hintMove = null;
 
+  if (positionRepetitionCount(state.board, state.currentSide) >= 3) {
+    finishGame(null, "draw");
+    return true;
+  }
+
   const outcome = evaluateGameEnd();
   if (!outcome) showMessage(isCheck ? `${sideName(nextSide)}被将军。` : `${sideName(state.currentSide)}行棋。`);
   beep(captured ? "capture" : isCheck ? "check" : "move");
@@ -425,7 +512,7 @@ function finishGame(winner, reason) {
     resign: "认输",
     draw: "和棋",
   };
-  const summary = `${sideName(winner)}获胜，原因：${reasons[reason] || reason}。`;
+  const summary = reason === "draw" ? "双方和棋，原因：重复局面。" : `${sideName(winner)}获胜，原因：${reasons[reason] || reason}。`;
   state.result = {
     winner,
     reason,
@@ -442,27 +529,48 @@ function finishGame(winner, reason) {
 function chooseAIMove() {
   const moves = allLegalMoves(state.board, state.currentSide);
   if (!moves.length) return null;
-  if (state.aiDifficulty === "easy") return pickEasyMove(moves);
-  const depth = state.aiDifficulty === "hard" ? 3 : 2;
-  let best = null;
-  let bestScore = -Infinity;
-  for (const move of shuffle(moves)) {
-    const score = -negamax(applyMoveToBoard(state.board, move), opposite(state.currentSide), depth - 1, -Infinity, Infinity, state.currentSide);
-    if (score > bestScore) {
-      bestScore = score;
-      best = move;
+  if (state.aiDifficulty === "easy") return pickEasyMove(moves, state.board, state.currentSide);
+  const maxDepth = SEARCH_DEPTH[state.aiDifficulty] || SEARCH_DEPTH.normal;
+  const deadline = performance.now() + (state.aiDifficulty === "hard" ? 1100 : 520);
+  const cache = new Map();
+  const rootMoves = preferNonRepeatingMoves(state.board, moves, state.currentSide);
+  let best = orderMoves(state.board, rootMoves, state.currentSide, state.currentSide)[0];
+
+  for (let depth = 1; depth <= maxDepth; depth += 1) {
+    let bestAtDepth = best;
+    let bestScore = -Infinity;
+    const ordered = orderMoves(state.board, rootMoves, state.currentSide, state.currentSide, best);
+    for (const move of ordered) {
+      if (performance.now() > deadline) break;
+      const score = -negamax(
+        applyMoveToBoard(state.board, move),
+        opposite(state.currentSide),
+        depth - 1,
+        -Infinity,
+        Infinity,
+        state.currentSide,
+        cache,
+        deadline,
+      ) - rootCyclePenalty(state.board, move, state.currentSide);
+      if (score > bestScore) {
+        bestScore = score;
+        bestAtDepth = move;
+      }
     }
+    if (performance.now() > deadline) break;
+    best = bestAtDepth;
   }
   return best || moves[0];
 }
 
-function pickEasyMove(moves) {
-  const captures = moves.filter((move) => move.capturedPieceId);
+function pickEasyMove(moves, board = state.board, side = state.currentSide) {
+  const candidates = preferNonRepeatingMoves(board, moves, side);
+  const captures = candidates.filter((move) => move.capturedPieceId);
   if (captures.length && Math.random() > 0.35) {
     captures.sort((a, b) => capturedValue(b) - capturedValue(a));
     return captures[0];
   }
-  return moves[Math.floor(Math.random() * moves.length)];
+  return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
 function capturedValue(move) {
@@ -470,22 +578,129 @@ function capturedValue(move) {
   return piece ? PIECE_VALUE[piece.type] : 0;
 }
 
-function negamax(board, side, depth, alpha, beta, aiSide) {
+function pieceValueOnBoard(board, pieceId) {
+  const piece = board.find((item) => item.id === pieceId);
+  return piece ? PIECE_VALUE[piece.type] : 0;
+}
+
+function canonicalBoardKey(board) {
+  return livePieces(board)
+    .map((piece) => `${piece.id}:${piece.x},${piece.y}`)
+    .sort()
+    .join("|");
+}
+
+function positionKey(board, side) {
+  return `${side}:${canonicalBoardKey(board)}`;
+}
+
+function positionRepetitionCount(board, side) {
+  const key = positionKey(board, side);
+  let count = positionKey(state.board, state.currentSide) === key ? 1 : 0;
+  for (const snapshot of state.snapshots) {
+    if (positionKey(snapshot.board, snapshot.currentSide) === key) count += 1;
+  }
+  return count;
+}
+
+function isDirectReversal(move, previousMove) {
+  return Boolean(
+    previousMove
+      && previousMove.pieceId === move.pieceId
+      && previousMove.fromX === move.toX
+      && previousMove.fromY === move.toY
+      && previousMove.toX === move.fromX
+      && previousMove.toY === move.fromY,
+  );
+}
+
+function rootCyclePenalty(board, move, side) {
+  const nextBoard = applyMoveToBoard(board, move);
+  const repetitions = positionRepetitionCount(nextBoard, opposite(side));
+  let penalty = repetitions * REPEATED_POSITION_PENALTY;
+  const recentAIMoves = state.moveHistory.filter((item) => item.byAI).slice(-4);
+  if (isDirectReversal(move, recentAIMoves.at(-1))) penalty += DIRECT_REVERSAL_PENALTY;
+  for (const recent of recentAIMoves) {
+    if (recent.pieceId !== move.pieceId) continue;
+    const sameRoute = recent.fromX === move.fromX && recent.fromY === move.fromY && recent.toX === move.toX && recent.toY === move.toY;
+    const reverseRoute = isDirectReversal(move, recent);
+    if (sameRoute || reverseRoute) penalty += RECENT_ROUTE_PENALTY;
+  }
+  return penalty;
+}
+
+function preferNonRepeatingMoves(board, moves, side) {
+  if (moves.length <= 1) return moves;
+  const nonRepeating = moves.filter((move) => rootCyclePenalty(board, move, side) < CYCLE_FILTER_PENALTY);
+  return nonRepeating.length ? nonRepeating : moves;
+}
+
+function moveOrderingScore(board, move, side, aiSide, preferredMove = null) {
+  let score = 0;
+  if (preferredMove && move.pieceId === preferredMove.pieceId && move.toX === preferredMove.toX && move.toY === preferredMove.toY) score += 100000;
+  if (move.capturedPieceId) {
+    score += 50000 + pieceValueOnBoard(board, move.capturedPieceId) * 12 - pieceValueOnBoard(board, move.pieceId);
+  }
+  const next = applyMoveToBoard(board, move);
+  if (isInCheck(next, opposite(side))) score += 9000;
+  if (isInCheck(next, side)) score -= 9000;
+  score += Math.max(0, 4 - Math.abs(move.toX - 4)) * 10;
+  score += positionalBonus(board.find((piece) => piece.id === move.pieceId), move.toX, move.toY) - positionalBonus(board.find((piece) => piece.id === move.pieceId));
+  return score;
+}
+
+function orderMoves(board, moves, side, aiSide, preferredMove = null) {
+  return [...moves].sort((a, b) => moveOrderingScore(board, b, side, aiSide, preferredMove) - moveOrderingScore(board, a, side, aiSide, preferredMove));
+}
+
+function boardKey(board, side, depth) {
+  return `${side}:${depth}:${canonicalBoardKey(board)}`;
+}
+
+function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), deadline = Infinity) {
+  if (performance.now() > deadline) return evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
+  const key = boardKey(board, side, depth);
+  const cached = cache.get(key);
+  if (cached && cached.depth >= depth) return cached.score;
   const moves = allLegalMoves(board, side);
   if (depth === 0 || moves.length === 0) {
     if (moves.length === 0) {
-      return isInCheck(board, side) ? (side === aiSide ? -20000 : 20000) : (side === aiSide ? -8000 : 8000);
+      return isInCheck(board, side) ? -MATE_SCORE - depth : -8000;
     }
-    return evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
+    return quiescence(board, side, alpha, beta, aiSide, QUIESCENCE_DEPTH, deadline);
   }
   let best = -Infinity;
-  for (const move of shuffle(moves)) {
-    const score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide);
+  let didCut = false;
+  for (const move of orderMoves(board, moves, side, aiSide)) {
+    const score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline);
     best = Math.max(best, score);
     alpha = Math.max(alpha, score);
-    if (alpha >= beta) break;
+    if (alpha >= beta) {
+      didCut = true;
+      break;
+    }
   }
+  if (!didCut) cache.set(key, { depth, score: best });
   return best;
+}
+
+function quiescence(board, side, alpha, beta, aiSide, depth, deadline) {
+  const standPat = evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
+  if (depth === 0 || performance.now() > deadline) return standPat;
+  if (standPat >= beta) return beta;
+  alpha = Math.max(alpha, standPat);
+  const captures = orderMoves(
+    board,
+    allLegalMoves(board, side).filter((move) => move.capturedPieceId || isInCheck(applyMoveToBoard(board, move), opposite(side))),
+    side,
+    aiSide,
+  );
+  for (const move of captures) {
+    const score = -quiescence(applyMoveToBoard(board, move), opposite(side), -beta, -alpha, aiSide, depth - 1, deadline);
+    if (score >= beta) return beta;
+    alpha = Math.max(alpha, score);
+  }
+  return alpha;
 }
 
 function evaluateBoard(board, aiSide) {
@@ -493,15 +708,40 @@ function evaluateBoard(board, aiSide) {
   for (const piece of livePieces(board)) {
     const direction = piece.side === aiSide ? 1 : -1;
     let value = PIECE_VALUE[piece.type];
-    if (piece.type === TYPES.SOLDIER && crossedRiver(piece.side, piece.y)) value += 60;
-    if (piece.type === TYPES.CHARIOT || piece.type === TYPES.HORSE || piece.type === TYPES.CANNON) {
-      value += Math.max(0, 4 - Math.abs(piece.x - 4)) * 8;
-    }
+    value += positionalBonus(piece);
+    value += rawMovesForPiece(board, piece).length * (MOBILITY_VALUE[piece.type] || 0);
+    if (isPieceAttacked(board, piece)) value -= Math.min(140, value * 0.12);
+    if (isPieceDefended(board, piece)) value += Math.min(70, value * 0.05);
     score += direction * value;
   }
   if (isInCheck(board, opposite(aiSide))) score += 120;
   if (isInCheck(board, aiSide)) score -= 160;
   return score;
+}
+
+function positionalBonus(piece, x = piece?.x, y = piece?.y) {
+  if (!piece) return 0;
+  const table = POSITION_BONUS[piece.type];
+  if (table) {
+    const row = piece.side === SIDES.RED ? y : 9 - y;
+    return table[row]?.[x] || 0;
+  }
+  const center = Math.max(0, 4 - Math.abs(x - 4)) * 4;
+  const palace = palaceContains(piece.side, x, y) ? 8 : 0;
+  return center + palace;
+}
+
+function isPieceAttacked(board, target) {
+  return livePieces(board)
+    .filter((piece) => piece.side !== target.side)
+    .some((piece) => rawMovesForPiece(board, piece, true).some((move) => move.toX === target.x && move.toY === target.y));
+}
+
+function isPieceDefended(board, target) {
+  const boardWithoutTarget = board.map((piece) => piece.id === target.id ? { ...piece, alive: false } : piece);
+  return livePieces(board)
+    .filter((piece) => piece.side === target.side && piece.id !== target.id)
+    .some((piece) => rawMovesForPiece(boardWithoutTarget, piece, true).some((move) => move.toX === target.x && move.toY === target.y));
 }
 
 function shuffle(items) {
@@ -614,6 +854,109 @@ function handleBoardClick(x, y) {
   }
 }
 
+function boardMetrics() {
+  const board = els.board;
+  const styles = window.getComputedStyle(board);
+  const pad = Number.parseFloat(styles.paddingLeft) || 26;
+  return {
+    rect: board.getBoundingClientRect(),
+    pad,
+    cell: (board.clientWidth - pad * 2) / 8,
+  };
+}
+
+function boardPointFromPointer(event) {
+  const { rect, pad, cell } = boardMetrics();
+  const localX = event.clientX - rect.left;
+  const localY = event.clientY - rect.top;
+  const minX = pad - cell * 0.5;
+  const maxX = pad + cell * 8.5;
+  const minY = pad - cell * 0.5;
+  const maxY = pad + cell * 9.5;
+  if (localX < minX || localX > maxX || localY < minY || localY > maxY) return null;
+  return {
+    x: Math.max(0, Math.min(8, Math.round((localX - pad) / cell))),
+    y: Math.max(0, Math.min(9, Math.round((localY - pad) / cell))),
+  };
+}
+
+function movePieceElement(pieceId, event) {
+  const el = els.board.querySelector(`[data-piece-id="${CSS.escape(pieceId)}"]`);
+  if (!el) return;
+  const { rect } = boardMetrics();
+  el.classList.add("dragging");
+  el.style.left = `${event.clientX - rect.left}px`;
+  el.style.top = `${event.clientY - rect.top}px`;
+}
+
+function clearDragVisual() {
+  els.board.querySelector(".piece.dragging")?.classList.remove("dragging");
+}
+
+function handleBoardPointerDown(event) {
+  if (!event.isPrimary || (event.button !== undefined && event.button !== 0)) return;
+  const point = boardPointFromPointer(event);
+  if (!point) return;
+  const clicked = pieceAt(state.board, point.x, point.y);
+  const draggablePieceId = clicked && clicked.side === state.playerSide ? clicked.id : selectedId;
+  dragState = {
+    pointerId: event.pointerId,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    pieceId: draggablePieceId,
+    moved: false,
+  };
+  els.board.setPointerCapture?.(event.pointerId);
+  event.preventDefault();
+}
+
+function handleBoardPointerMove(event) {
+  if (!dragState || event.pointerId !== dragState.pointerId || !dragState.pieceId) return;
+  const distance = Math.hypot(event.clientX - dragState.startClientX, event.clientY - dragState.startClientY);
+  if (distance < 7 && !dragState.moved) return;
+  dragState.moved = true;
+  if (selectedId !== dragState.pieceId) {
+    const piece = state.board.find((item) => item.id === dragState.pieceId);
+    if (!piece || piece.side !== state.playerSide) return;
+    selectedId = piece.id;
+    legalTargets = legalMovesForPiece(state.board, piece);
+    hintMove = null;
+    els.pieceHelp.textContent = `${piece.label}：${HELP[piece.type]}`;
+  }
+  movePieceElement(dragState.pieceId, event);
+}
+
+function handleBoardPointerUp(event) {
+  if (!dragState || event.pointerId !== dragState.pointerId) return;
+  const wasDrag = dragState.moved;
+  const point = boardPointFromPointer(event);
+  const pieceId = dragState.pieceId;
+  dragState = null;
+  clearDragVisual();
+  els.board.releasePointerCapture?.(event.pointerId);
+  if (!point) {
+    renderBoard();
+    return;
+  }
+  if (wasDrag && pieceId) {
+    const selected = state.board.find((piece) => piece.id === pieceId);
+    if (selected && selectedId !== pieceId) {
+      selectedId = pieceId;
+      legalTargets = legalMovesForPiece(state.board, selected);
+    }
+    const move = legalTargets.find((item) => item.pieceId === pieceId && item.toX === point.x && item.toY === point.y);
+    if (move) {
+      executeMove(move, false);
+      return;
+    }
+    showMessage("该位置不能落子。");
+    beep("error");
+    render();
+    return;
+  }
+  handleBoardClick(point.x, point.y);
+}
+
 function selectPiece(piece) {
   selectedId = piece.id;
   legalTargets = legalMovesForPiece(state.board, piece);
@@ -666,7 +1009,6 @@ function renderBoard() {
       if (state.lastMove && ((state.lastMove.fromX === x && state.lastMove.fromY === y) || (state.lastMove.toX === x && state.lastMove.toY === y))) {
         point.classList.add("last");
       }
-      point.addEventListener("click", () => handleBoardClick(x, y));
       board.appendChild(point);
     }
   }
@@ -678,13 +1020,10 @@ function renderBoard() {
     el.textContent = piece.label;
     el.style.left = `${pad + piece.x * cell}px`;
     el.style.top = `${pad + piece.y * cell}px`;
+    el.dataset.pieceId = piece.id;
     el.setAttribute("aria-label", `${sideName(piece.side)}${piece.label}`);
     if (piece.id === selectedId) el.classList.add("selected");
     if (piece.type === TYPES.GENERAL && isInCheck(state.board, piece.side)) el.classList.add("check");
-    el.addEventListener("click", (event) => {
-      event.stopPropagation();
-      handleBoardClick(piece.x, piece.y);
-    });
     board.appendChild(el);
   }
 
@@ -912,6 +1251,14 @@ function bindEvents() {
     settings.darkBoard = buttons.themeToggle.checked;
     render();
     saveGame();
+  });
+  els.board.addEventListener("pointerdown", handleBoardPointerDown);
+  els.board.addEventListener("pointermove", handleBoardPointerMove);
+  els.board.addEventListener("pointerup", handleBoardPointerUp);
+  els.board.addEventListener("pointercancel", () => {
+    dragState = null;
+    clearDragVisual();
+    renderBoard();
   });
   window.addEventListener("resize", renderBoard);
 }
