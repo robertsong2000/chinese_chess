@@ -1,0 +1,11 @@
+services:
+  chinese-chess:
+    image: nginx:1.27-alpine
+    container_name: chinese-chess
+    ports:
+      - "8080:80"
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./app.js:/usr/share/nginx/html/app.js:ro
+      - ./styles.css:/usr/share/nginx/html/styles.css:ro
+    restart: unless-stopped
