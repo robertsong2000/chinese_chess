@@ -1,0 +1,8 @@
+{
+  "name": "chinese-chess",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "benchmark:ai": "node tests/ai-benchmark.js"
+  }
+}

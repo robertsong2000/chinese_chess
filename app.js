@@ -132,6 +132,7 @@ const HELP = {
 };
 
 const STORAGE_KEY = "cn_chess_session_v1";
+const BOARD_INDEX_CACHE = new WeakMap();
 
 const els = {
   board: document.querySelector("#board"),
@@ -236,8 +237,21 @@ function livePieces(board = state.board) {
   return board.filter((piece) => piece.alive);
 }
 
+function boardIndex(board) {
+  let index = BOARD_INDEX_CACHE.get(board);
+  if (!index) {
+    index = Array(90).fill(null);
+    for (const piece of board) {
+      if (piece.alive) index[piece.y * 9 + piece.x] = piece;
+    }
+    BOARD_INDEX_CACHE.set(board, index);
+  }
+  return index;
+}
+
 function pieceAt(board, x, y) {
-  return board.find((piece) => piece.alive && piece.x === x && piece.y === y) || null;
+  if (!inBoard(x, y)) return null;
+  return boardIndex(board)[y * 9 + x];
 }
 
 function inBoard(x, y) {
@@ -265,13 +279,13 @@ function crossedRiver(side, y) {
   return side === SIDES.RED ? y <= 4 : y >= 5;
 }
 
-function rawMovesForPiece(board, piece, attacksOnly = false) {
+function rawMovesForPiece(board, piece, attacksOnly = false, includeFriendlyTargets = false) {
   if (!piece.alive) return [];
   const moves = [];
   const push = (x, y) => {
     if (!inBoard(x, y)) return;
     const target = pieceAt(board, x, y);
-    if (!target || target.side !== piece.side) moves.push(makeCandidate(piece, x, y, target));
+    if (!target || target.side !== piece.side || includeFriendlyTargets) moves.push(makeCandidate(piece, x, y, target));
   };
 
   if (piece.type === TYPES.CHARIOT || piece.type === TYPES.CANNON) {
@@ -284,7 +298,7 @@ function rawMovesForPiece(board, piece, attacksOnly = false) {
         if (piece.type === TYPES.CHARIOT) {
           if (!target) moves.push(makeCandidate(piece, x, y, null));
           else {
-            if (target.side !== piece.side) moves.push(makeCandidate(piece, x, y, target));
+            if (target.side !== piece.side || includeFriendlyTargets) moves.push(makeCandidate(piece, x, y, target));
             break;
           }
         } else if (!target) {
@@ -292,7 +306,7 @@ function rawMovesForPiece(board, piece, attacksOnly = false) {
         } else {
           screens += 1;
           if (screens === 2) {
-            if (target.side !== piece.side) moves.push(makeCandidate(piece, x, y, target));
+            if (target.side !== piece.side || includeFriendlyTargets) moves.push(makeCandidate(piece, x, y, target));
             break;
           }
         }
@@ -383,6 +397,18 @@ function countBetween(board, x, y1, y2) {
   return count;
 }
 
+function countLineBetween(board, x1, y1, x2, y2) {
+  if (x1 === x2) return countBetween(board, x1, y1, y2);
+  if (y1 !== y2) return Infinity;
+  const min = Math.min(x1, x2) + 1;
+  const max = Math.max(x1, x2);
+  let count = 0;
+  for (let x = min; x < max; x += 1) {
+    if (pieceAt(board, x, y1)) count += 1;
+  }
+  return count;
+}
+
 function generalsFacing(board) {
   const red = board.find((p) => p.alive && p.type === TYPES.GENERAL && p.side === SIDES.RED);
   const black = board.find((p) => p.alive && p.type === TYPES.GENERAL && p.side === SIDES.BLACK);
@@ -396,7 +422,7 @@ function cloneBoard(board) {
 function applyMoveToBoard(board, move) {
   const next = cloneBoard(board);
   const moving = next.find((piece) => piece.id === move.pieceId);
-  const captured = pieceAt(next, move.toX, move.toY);
+  const captured = next.find((piece) => piece.alive && piece.x === move.toX && piece.y === move.toY);
   if (captured) captured.alive = false;
   moving.x = move.toX;
   moving.y = move.toY;
@@ -408,7 +434,44 @@ function isInCheck(board, side) {
   if (!general) return true;
   return livePieces(board)
     .filter((piece) => piece.side !== side)
-    .some((piece) => rawMovesForPiece(board, piece, true).some((move) => move.toX === general.x && move.toY === general.y));
+    .some((piece) => pieceAttacksSquare(board, piece, general.x, general.y));
+}
+
+function pieceAttacksSquare(board, piece, x, y) {
+  const dx = x - piece.x;
+  const dy = y - piece.y;
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+
+  if (piece.type === TYPES.CHARIOT) {
+    return (dx === 0 || dy === 0) && countLineBetween(board, piece.x, piece.y, x, y) === 0;
+  }
+  if (piece.type === TYPES.CANNON) {
+    return (dx === 0 || dy === 0) && countLineBetween(board, piece.x, piece.y, x, y) === 1;
+  }
+  if (piece.type === TYPES.HORSE) {
+    if (absX === 1 && absY === 2) return !pieceAt(board, piece.x, piece.y + Math.sign(dy));
+    if (absX === 2 && absY === 1) return !pieceAt(board, piece.x + Math.sign(dx), piece.y);
+    return false;
+  }
+  if (piece.type === TYPES.ELEPHANT) {
+    const ownSide = piece.side === SIDES.RED ? y >= 5 : y <= 4;
+    return absX === 2 && absY === 2 && ownSide && !pieceAt(board, piece.x + dx / 2, piece.y + dy / 2);
+  }
+  if (piece.type === TYPES.ADVISOR) {
+    return absX === 1 && absY === 1 && palaceContains(piece.side, x, y);
+  }
+  if (piece.type === TYPES.GENERAL) {
+    const adjacent = absX + absY === 1 && palaceContains(piece.side, x, y);
+    const flyingGeneral = dx === 0 && countBetween(board, piece.x, piece.y, y) === 0;
+    return adjacent || flyingGeneral;
+  }
+  if (piece.type === TYPES.SOLDIER) {
+    const forward = piece.side === SIDES.RED ? -1 : 1;
+    return (dx === 0 && dy === forward)
+      || (dy === 0 && absX === 1 && crossedRiver(piece.side, piece.y));
+  }
+  return false;
 }
 
 function legalMovesForPiece(board, piece) {
@@ -643,14 +706,16 @@ function moveOrderingScore(board, move, side, aiSide, preferredMove = null) {
   }
   const next = applyMoveToBoard(board, move);
   if (isInCheck(next, opposite(side))) score += 9000;
-  if (isInCheck(next, side)) score -= 9000;
   score += Math.max(0, 4 - Math.abs(move.toX - 4)) * 10;
   score += positionalBonus(board.find((piece) => piece.id === move.pieceId), move.toX, move.toY) - positionalBonus(board.find((piece) => piece.id === move.pieceId));
   return score;
 }
 
 function orderMoves(board, moves, side, aiSide, preferredMove = null) {
-  return [...moves].sort((a, b) => moveOrderingScore(board, b, side, aiSide, preferredMove) - moveOrderingScore(board, a, side, aiSide, preferredMove));
+  return moves
+    .map((move) => ({ move, score: moveOrderingScore(board, move, side, aiSide, preferredMove) }))
+    .sort((a, b) => b.score - a.score)
+    .map(({ move }) => move);
 }
 
 function boardKey(board, side, depth) {
@@ -659,15 +724,19 @@ function boardKey(board, side, depth) {
 
 function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), deadline = Infinity) {
   if (performance.now() > deadline) return evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
+  if (depth === 0) {
+    const moves = allLegalMoves(board, side);
+    if (moves.length === 0) {
+      return isInCheck(board, side) ? -MATE_SCORE - depth : -8000;
+    }
+    return quiescence(board, side, alpha, beta, aiSide, QUIESCENCE_DEPTH, deadline, moves);
+  }
   const key = boardKey(board, side, depth);
   const cached = cache.get(key);
   if (cached && cached.depth >= depth) return cached.score;
   const moves = allLegalMoves(board, side);
-  if (depth === 0 || moves.length === 0) {
-    if (moves.length === 0) {
-      return isInCheck(board, side) ? -MATE_SCORE - depth : -8000;
-    }
-    return quiescence(board, side, alpha, beta, aiSide, QUIESCENCE_DEPTH, deadline);
+  if (moves.length === 0) {
+    return isInCheck(board, side) ? -MATE_SCORE - depth : -8000;
   }
   let best = -Infinity;
   let didCut = false;
@@ -684,18 +753,25 @@ function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), dea
   return best;
 }
 
-function quiescence(board, side, alpha, beta, aiSide, depth, deadline) {
+function quiescence(board, side, alpha, beta, aiSide, depth, deadline, legalMoves = null) {
+  const inCheck = isInCheck(board, side);
   const standPat = evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
   if (depth === 0 || performance.now() > deadline) return standPat;
-  if (standPat >= beta) return beta;
-  alpha = Math.max(alpha, standPat);
-  const captures = orderMoves(
+  if (!inCheck) {
+    if (standPat >= beta) return beta;
+    alpha = Math.max(alpha, standPat);
+  }
+  const moves = legalMoves || allLegalMoves(board, side);
+  if (!moves.length) return inCheck ? -MATE_SCORE - depth : -8000;
+  const tacticalMoves = orderMoves(
     board,
-    allLegalMoves(board, side).filter((move) => move.capturedPieceId || isInCheck(applyMoveToBoard(board, move), opposite(side))),
+    inCheck
+      ? moves
+      : moves.filter((move) => move.capturedPieceId),
     side,
     aiSide,
   );
-  for (const move of captures) {
+  for (const move of tacticalMoves) {
     const score = -quiescence(applyMoveToBoard(board, move), opposite(side), -beta, -alpha, aiSide, depth - 1, deadline);
     if (score >= beta) return beta;
     alpha = Math.max(alpha, score);
@@ -705,13 +781,15 @@ function quiescence(board, side, alpha, beta, aiSide, depth, deadline) {
 
 function evaluateBoard(board, aiSide) {
   let score = 0;
+  const controlMaps = buildControlMaps(board);
   for (const piece of livePieces(board)) {
     const direction = piece.side === aiSide ? 1 : -1;
     let value = PIECE_VALUE[piece.type];
     value += positionalBonus(piece);
     value += rawMovesForPiece(board, piece).length * (MOBILITY_VALUE[piece.type] || 0);
-    if (isPieceAttacked(board, piece)) value -= Math.min(140, value * 0.12);
-    if (isPieceDefended(board, piece)) value += Math.min(70, value * 0.05);
+    const square = piece.y * 9 + piece.x;
+    if (controlMaps[opposite(piece.side)].has(square)) value -= Math.min(140, value * 0.12);
+    if (controlMaps[piece.side].has(square)) value += Math.min(70, value * 0.05);
     score += direction * value;
   }
   if (isInCheck(board, opposite(aiSide))) score += 120;
@@ -731,17 +809,17 @@ function positionalBonus(piece, x = piece?.x, y = piece?.y) {
   return center + palace;
 }
 
-function isPieceAttacked(board, target) {
-  return livePieces(board)
-    .filter((piece) => piece.side !== target.side)
-    .some((piece) => rawMovesForPiece(board, piece, true).some((move) => move.toX === target.x && move.toY === target.y));
-}
-
-function isPieceDefended(board, target) {
-  const boardWithoutTarget = board.map((piece) => piece.id === target.id ? { ...piece, alive: false } : piece);
-  return livePieces(board)
-    .filter((piece) => piece.side === target.side && piece.id !== target.id)
-    .some((piece) => rawMovesForPiece(boardWithoutTarget, piece, true).some((move) => move.toX === target.x && move.toY === target.y));
+function buildControlMaps(board) {
+  const maps = {
+    [SIDES.RED]: new Set(),
+    [SIDES.BLACK]: new Set(),
+  };
+  for (const piece of livePieces(board)) {
+    for (const move of rawMovesForPiece(board, piece, true, true)) {
+      maps[piece.side].add(move.toY * 9 + move.toX);
+    }
+  }
+  return maps;
 }
 
 function shuffle(items) {
