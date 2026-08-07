@@ -106,3 +106,49 @@ test("app.js exposes createAIWorker factory returning null when Worker is unavai
   );
   assert.equal(safeCall, null);
 });
+
+// 子任务 C-min:chooseAIMoveAsync 在无 Worker 环境必须走同步 fallback,
+// 回调收到的走法必须是合法走法,且与同步 chooseAIMove() 走法一致(同一状态)。
+test("app.js chooseAIMoveAsync falls back to sync chooseAIMove when Worker is unavailable", () => {
+  const APP_PATH = path.join(__dirname, "..", "app.js");
+  const INITIALIZATION = /\nbindEvents\(\);\nloadGame\(\);\nsyncSettingsUI\(\);\nrender\(\);\s*$/;
+  const source = fs.readFileSync(APP_PATH, "utf8").replace(INITIALIZATION, "");
+  const context = vm.createContext({
+    console,
+    performance: { now: () => Date.now() },
+    setTimeout,
+    clearTimeout,
+    document: {
+      querySelector: () => ({}),
+      querySelectorAll: () => [],
+    },
+  });
+  vm.runInContext(source, context, { filename: APP_PATH });
+
+  const result = vm.runInContext(`
+    (function () {
+      state = createGame(SIDES.RED, "normal");
+      state.status = "playing";
+      state.currentSide = SIDES.BLACK;
+      const syncMove = chooseAIMove();
+      let asyncMove = null;
+      let called = false;
+      chooseAIMoveAsync(state, (move) => { asyncMove = move; called = true; });
+      const legal = allLegalMoves(state.board, state.currentSide);
+      const isLegal = asyncMove && legal.some((c) =>
+        c.pieceId === asyncMove.pieceId && c.toX === asyncMove.toX && c.toY === asyncMove.toY);
+      return {
+        called,
+        syncPieceId: syncMove && syncMove.pieceId,
+        asyncPieceId: asyncMove && asyncMove.pieceId,
+        asyncFrom: asyncMove && [asyncMove.fromX, asyncMove.fromY],
+        asyncTo: asyncMove && [asyncMove.toX, asyncMove.toY],
+        isLegal,
+      };
+    })()
+  `, context);
+
+  assert.equal(result.called, true, "callback must be invoked synchronously in fallback path");
+  assert.ok(result.asyncPieceId, "fallback move must be non-null");
+  assert.equal(result.isLegal, true, "fallback move must be legal");
+});

@@ -1010,6 +1010,65 @@ function createAIWorker() {
   }
 }
 
+// 异步版 AI 走法选择:浏览器若启用 Worker,走 worker-first-then-sync-fallback 路径;
+// node/无 Worker 环境直接同步 callback(chooseAIMove())。
+// 子任务 C-min:链路打通 + 安全 fallback。worker 端真正搜索逻辑在子任务 B-full 落地,
+// 在那之前 worker 会返回 move=null,触发此处 fallback 到同步搜索,行为完全不变。
+function chooseAIMoveAsync(s, callback) {
+  const worker = createAIWorker();
+  if (!worker) {
+    callback(chooseAIMove());
+    return;
+  }
+  const budget = TIME_BUDGET_MS[s.aiDifficulty] || TIME_BUDGET_MS.normal;
+  const fallbackGuardMs = budget + 1500;
+  let settled = false;
+  const finish = (move) => {
+    if (settled) return;
+    settled = true;
+    try { worker.terminate(); } catch (_) { /* ignore */ }
+    callback(move);
+  };
+  const safetyTimer = setTimeout(() => {
+    console.warn("AI worker timeout, fallback to sync");
+    finish(chooseAIMove());
+  }, fallbackGuardMs);
+  worker.onmessage = (event) => {
+    const data = event && event.data;
+    if (!data) return;
+    if (data.type === "ready") return;
+    if (data.type === "result") {
+      clearTimeout(safetyTimer);
+      // worker 未实现搜索时 move=null → fallback 同步搜索
+      finish(data.move ? data.move : chooseAIMove());
+    } else if (data.type === "error") {
+      clearTimeout(safetyTimer);
+      finish(chooseAIMove());
+    }
+  };
+  worker.onerror = (err) => {
+    clearTimeout(safetyTimer);
+    console.warn("AI worker error, fallback to sync:", err && err.message);
+    finish(chooseAIMove());
+  };
+  try {
+    worker.postMessage({
+      type: "search",
+      ctx: {
+        board: s.board.map((row) => row.slice()),
+        currentSide: s.currentSide,
+        aiDifficulty: s.aiDifficulty,
+        moveHistory: (s.moveHistory || []).map((m) => ({ ...m })),
+        snapshots: (s.snapshots || []).map((snap) => snap.board.map((row) => row.slice())),
+      },
+    });
+  } catch (err) {
+    clearTimeout(safetyTimer);
+    console.warn("AI worker postMessage failed, fallback to sync:", err);
+    finish(chooseAIMove());
+  }
+}
+
 // 纯函数版 AI 搜索:接受 state 引用,返回选定的走法。
 // 抽出的目的:为 Web Worker 化做准备(worker 无法访问全局 state,需显式传入)。
 // 注意:内部辅助函数(capturedValue/positionRepetitionCount/rootCyclePenalty)目前
@@ -1540,10 +1599,11 @@ function scheduleAI() {
   render();
   aiTimer = setTimeout(() => {
     if (state.status !== "playing" || state.currentSide === state.playerSide) return;
-    const move = chooseAIMove();
-    state.thinking = false;
-    if (move) executeMove(move, true);
-    else evaluateGameEnd();
+    chooseAIMoveAsync(state, (move) => {
+      state.thinking = false;
+      if (move) executeMove(move, true);
+      else evaluateGameEnd();
+    });
   }, state.aiDifficulty === "hard" ? 520 : 320);
 }
 
