@@ -32,7 +32,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 2,
+  "current_phase": 3,
   "phases": [
     {
       "id": 1,
@@ -380,11 +380,11 @@
         "CHANGELOG.md"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 15,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T06:42:10+08:00",
+      "commit_sha": "ea17e86"
     },
     {
       "id": 16,
@@ -669,6 +669,14 @@
       "action": "completed",
       "summary": "加 GitHub Actions CI(.github/workflows/test.yml):push/PR 触发,Node 20/22 矩阵跑 npm test + benchmark smoke(continue-on-error)。15/15 测试通过。",
       "commit_sha": "78deaaf"
+    },
+    {
+      "timestamp": "2026-08-08T06:42:10+08:00",
+      "todo_id": 15,
+      "action": "completed",
+      "summary": "加 CHANGELOG.md(Keep a Changelog 格式):v0.0.1 - v0.4.0 五个版本从 git log 推导,每版本按 Added / Changed 分类,引用 commit SHA + TODO 编号。Phase 2 全部完成,推进到 Phase 3。",
+      "commit_sha": "ea17e86",
+      "full_commit_sha": "ea17e86df5f078ba8bc6e69453397c97709e8b66"
     }
   ],
   "rules": [
@@ -680,5 +688,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "下次运行应做 id=14 加 GitHub Actions CI:创建 .github/workflows/test.yml,每次 push/PR 跑 npm test。Node 22 + cache。预估 15 分钟。"
+  "next_run_hint": "下次运行应做 id=16 加 ESLint + Prettier 配置:创建 .eslintrc.json(recommended)+ .prettierrc(单引号 / 100 字符 / 无分号),在 package.json 加 lint script。预估 15 分钟。"
 }
