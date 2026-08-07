@@ -60,6 +60,19 @@ const LMR_REDUCTION = 1;
 const NULL_MOVE_MIN_DEPTH = 3;
 const NULL_MOVE_REDUCTION = 2;
 
+// 协同评估:车马炮进入攻击区(过河)加分,成对组合额外加分
+const ATTACK_ZONE_BONUS = {
+  chariot: 30,
+  cannon: 20,
+  horse: 25,
+};
+// 同时存在 N 个该类型棋子时,每个棋子额外加分(鼓励保留战术组合)
+const PAIR_BONUS = {
+  chariot: { 2: 30 }, // 双车
+  cannon: { 2: 15 }, // 双炮
+  horse: { 2: 18 }, // 双马
+};
+
 const MOBILITY_VALUE = {
   general: 0,
   advisor: 1,
@@ -961,6 +974,16 @@ function quiescence(board, side, alpha, beta, aiSide, depth, deadline, legalMove
 function evaluateBoard(board, aiSide) {
   let score = 0;
   const controlMaps = buildControlMaps(board);
+  // 按方统计车马炮存活数,用于成对组合加分
+  const attackerCount = {
+    [SIDES.RED]: { chariot: 0, cannon: 0, horse: 0 },
+    [SIDES.BLACK]: { chariot: 0, cannon: 0, horse: 0 },
+  };
+  for (const piece of livePieces(board)) {
+    if (attackerCount[piece.side] && piece.type in attackerCount[piece.side]) {
+      attackerCount[piece.side][piece.type] += 1;
+    }
+  }
   for (const piece of livePieces(board)) {
     const direction = piece.side === aiSide ? 1 : -1;
     let value = PIECE_VALUE[piece.type];
@@ -969,6 +992,19 @@ function evaluateBoard(board, aiSide) {
     const square = piece.y * 9 + piece.x;
     if (controlMaps[opposite(piece.side)].has(square)) value -= Math.min(140, value * 0.12);
     if (controlMaps[piece.side].has(square)) value += Math.min(70, value * 0.05);
+    // 攻击区(过河)车马炮加分
+    const zoneBonus = ATTACK_ZONE_BONUS[piece.type];
+    if (zoneBonus && crossedRiver(piece.side, piece.y)) {
+      value += zoneBonus;
+    }
+    // 成对组合加分:同方同类型存活数达到阈值时,该类棋子每个加 PAIR_BONUS
+    const pairBonusTable = PAIR_BONUS[piece.type];
+    if (pairBonusTable) {
+      const count = attackerCount[piece.side][piece.type];
+      // 取该 count 对应的最大档位(>=2)
+      const tier = count >= 2 ? 2 : 0;
+      if (tier) value += pairBonusTable[tier] || 0;
+    }
     score += direction * value;
   }
   if (isInCheck(board, opposite(aiSide))) score += 120;
