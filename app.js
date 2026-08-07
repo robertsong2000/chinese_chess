@@ -589,9 +589,87 @@ function finishGame(winner, reason) {
   beep("finish");
 }
 
+const OPENING_BOOK_MAX_PLIES = 10;
+
+const OPENING_BOOK_LINES = [
+  [
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+  ],
+  [
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 7, fromY: 2, toX: 4, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+  ],
+  [
+    { fromX: 3, fromY: 6, toX: 3, toY: 5 },
+    { fromX: 5, fromY: 3, toX: 5, toY: 4 },
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+  ],
+  [
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+  ],
+  [
+    { fromX: 6, fromY: 9, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+  ],
+];
+
+function getOpeningBookMove(legalMoves, moveHistory) {
+  if (!moveHistory || moveHistory.length >= OPENING_BOOK_MAX_PLIES) return null;
+
+  for (const line of OPENING_BOOK_LINES) {
+    if (line.length <= moveHistory.length) continue;
+
+    let prefixMatches = true;
+    for (let i = 0; i < moveHistory.length; i += 1) {
+      const played = moveHistory[i];
+      const expected = line[i];
+      if (
+        played.fromX !== expected.fromX
+        || played.fromY !== expected.fromY
+        || played.toX !== expected.toX
+        || played.toY !== expected.toY
+      ) {
+        prefixMatches = false;
+        break;
+      }
+    }
+
+    if (!prefixMatches) continue;
+
+    const next = line[moveHistory.length];
+    const match = legalMoves.find(
+      (m) => m.fromX === next.fromX
+        && m.fromY === next.fromY
+        && m.toX === next.toX
+        && m.toY === next.toY,
+    );
+    if (match) return match;
+  }
+
+  return null;
+}
+
 function chooseAIMove() {
   const moves = allLegalMoves(state.board, state.currentSide);
   if (!moves.length) return null;
+  if (state.aiDifficulty !== "easy") {
+    const bookMove = getOpeningBookMove(moves, state.moveHistory);
+    if (bookMove) return bookMove;
+  }
   if (state.aiDifficulty === "easy") return pickEasyMove(moves, state.board, state.currentSide);
   const maxDepth = SEARCH_DEPTH[state.aiDifficulty] || SEARCH_DEPTH.normal;
   const deadline = performance.now() + (state.aiDifficulty === "hard" ? 1100 : 520);
