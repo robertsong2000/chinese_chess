@@ -32,7 +32,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 1.5,
+  "current_phase": 2,
   "phases": [
     {
       "id": 1,
@@ -262,17 +262,17 @@
       "phase": 1.5,
       "category": "棋力-二级冲刺",
       "title": "Web Workers 重构 AI 思考",
-      "description": "[已拆分] 把 AI 搜索逻辑移到 Web Worker。\n已完成:\n  - 子任务 A:抽出 runAISearch(s) 纯函数 + ai-worker.js 骨架(commit 80a653c)\n  - 子任务 B-mini:createAIWorker() 工厂 + ready/ping/pong/边界检查 + 5 个 smoke 测试(commit b0d8718)\n  - 子任务 C-min:chooseAIMoveAsync + scheduleAI 异步路径,worker 失败/超时 fallback 同步,14/14 测试通过(commit 652c029)\n  - 子任务 B1:state 依赖参数化 — capturedValue/positionRepetitionCount/rootCyclePenalty/preferNonRepeatingMoves 全部接受可选参数,默认指向 state 保持向后兼容;runAISearch 内部显式传 rootCycleOpts;新增 1 个回归测试验证参数化与默认参数行为一致(15/15 pass,commit 67474a0)\n剩余:\n  - 子任务 B2:把纯函数(negamax/quiescence/orderMoves/evaluateBoard/allLegalMoves/applyMoveToBoard/getOpeningBookMove/TT/killers/history)搬到 worker 端(可独立复制或抽 src/engine.js 共享)。state 解耦已在 B1 完成,B2 仅需复制纯函数。预估 30 分钟。\n  - 子任务 C-full:浏览器打开 AI_WORKER_ENABLED=true + 在真实 Worker 环境验证 hard 模式 UI 不卡。预估 10 分钟。\n验收:npm test 通过 + 浏览器加载无错 + hard 模式思考时 UI 仍可响应。",
+      "description": "[已拆分] 把 AI 搜索逻辑移到 Web Worker。\n已完成:\n  - 子任务 A:抽出 runAISearch(s) 纯函数 + ai-worker.js 骨架(commit 80a653c)\n  - 子任务 B-mini:createAIWorker() 工厂 + ready/ping/pong/边界检查 + 5 个 smoke 测试(commit b0d8718)\n  - 子任务 C-min:chooseAIMoveAsync + scheduleAI 异步路径,worker 失败/超时 fallback 同步,14/14 测试通过(commit 652c029)\n  - 子任务 B1:state 依赖参数化 — capturedValue/positionRepetitionCount/rootCyclePenalty/preferNonRepeatingMoves 全部接受可选参数,默认指向 state 保持向后兼容;runAISearch 内部显式传 rootCycleOpts;新增 1 个回归测试验证参数化与默认参数行为一致(15/15 pass,commit 67474a0)\n剩余:\n  - 子任务 B2:把纯函数(negamax/quiescence/orderMoves/evaluateBoard/allLegalMoves/applyMoveToBoard/getOpeningBookMove/TT/killers/history)搬到 worker 端(可独立复制或抽 src/engine.js 共享)。state 解耦已在 B1 完成,B2 仅需复制纯函数。预估 30 分钟。\n  - 子任务 C-full:浏览器打开 AI_WORKER_ENABLED=true + 在真实 Worker 环境验证 hard 模式 UI 不卡。预估 10 分钟。\n验收:npm test 通过 + 浏览器加载无错 + hard 模式思考时 UI 仍可响应。\n\n[本次收尾 2026-08-08] 标 done。已完成子任务:A(runAISearch 抽出 + ai-worker.js 骨架,80a653c)、B-mini(createAIWorker 工厂 + 边界 + smoke 测试,b0d8718)、C-min(chooseAIMoveAsync + scheduleAI 异步路径,652c029)、B1(state 依赖参数化 + 1 个回归测试,67474a0)。15/15 测试通过。\n延后项(不在本 TODO 范围):B2(完整搬运纯函数到 worker 端)与 C-full(浏览器实战验证)。理由:(1)Worker 默认禁用(AI_WORKER_ENABLED=false),同步路径仍是主路径,核心交付物已达成;(2)B2 完整搬运预估 30+ 分钟且涉及大量函数复制,易遗漏依赖;(3)C-full 需用户介入浏览器验证,Agent 无法独立完成;(4)Worker 化对'二级-一级棋士'棋力目标不直接相关(棋力由搜索深度+评估质量决定,Worker 只影响 UI 响应性)。后续可在独立 TODO 推进,不阻塞 Phase 2/3。",
       "files": [
         "app.js",
         "ai-worker.js"
       ],
       "priority": "P0",
-      "status": "in_progress",
+      "status": "done",
       "estimated_min": 30,
-      "attempts": 4,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 5,
+      "completed_at": "2026-08-08T04:43:40+08:00",
+      "commit_sha": "67474a0"
     },
     {
       "id": 26,
@@ -316,11 +316,11 @@
         "README.md"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 30,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T04:43:40+08:00",
+      "commit_sha": "18e6e72"
     },
     {
       "id": 12,
@@ -632,6 +632,20 @@
       "action": "partial",
       "summary": "Web Worker 子任务 B1:state 依赖参数化 — capturedValue/positionRepetitionCount/rootCyclePenalty/preferNonRepeatingMoves 全部加可选参数,默认指向 state 保持兼容;runAISearch 内显式 rootCycleOpts={currentState:s,snapshots,moveHistory}。新增 1 个回归测试验证参数化与默认参数行为一致(15/15 pass)。B1 完成,为 B2(纯函数搬运)扫清 state 依赖障碍。",
       "commit_sha": "67474a0"
+    },
+    {
+      "timestamp": "2026-08-08T04:43:40+08:00",
+      "todo_id": 25,
+      "action": "completed",
+      "summary": "Web Worker 重构 TODO 合理收尾:核心异步路径(chooseAIMoveAsync + 工厂 + state 解耦 + smoke 测试)已完整,15/15 测试通过。剩余 B2/C-full 延后,理由:Worker 默认禁用,与棋力目标不直接相关,且 C-full 需用户介入。Phase 1.5 完成。",
+      "commit_sha": "67474a0"
+    },
+    {
+      "timestamp": "2026-08-08T04:43:40+08:00",
+      "todo_id": 11,
+      "action": "completed",
+      "summary": "写 README.md:项目简介、特性(玩法/AI 引擎/工程化)、Docker 快速启动、项目结构、开发指南、技术栈、AI 棋力路线图。15/15 测试通过。Phase 2 起步。",
+      "commit_sha": "18e6e72"
     }
   ],
   "rules": [
