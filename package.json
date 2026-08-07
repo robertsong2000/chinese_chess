@@ -1,6 +1,7 @@
 {
   "name": "chinese-chess",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "test": "node --test tests/*.test.js",
     "benchmark:ai": "node tests/ai-benchmark.js"
