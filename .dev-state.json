@@ -332,11 +332,11 @@
         "LICENSE"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 5,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T05:11:42+08:00",
+      "commit_sha": "db56908"
     },
     {
       "id": 13,
@@ -348,11 +348,11 @@
         ".gitignore"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 5,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T05:42:14.213693+08:00",
+      "commit_sha": "c9f54dc"
     },
     {
       "id": 14,
@@ -646,6 +646,22 @@
       "action": "completed",
       "summary": "写 README.md:项目简介、特性(玩法/AI 引擎/工程化)、Docker 快速启动、项目结构、开发指南、技术栈、AI 棋力路线图。15/15 测试通过。Phase 2 起步。",
       "commit_sha": "18e6e72"
+    },
+    {
+      "timestamp": "2026-08-08T05:11:42+08:00",
+      "todo_id": 12,
+      "action": "completed",
+      "summary": "加 LICENSE(MIT) 文件 + package.json license 字段。15/15 测试通过。",
+      "commit_sha": "db56908",
+      "full_commit_sha": "db569089f5aa96198c7a1a01c20ca14a89ebfc27"
+    },
+    {
+      "timestamp": "2026-08-08T05:42:14.213693+08:00",
+      "todo_id": 13,
+      "action": "completed",
+      "summary": "加 .gitignore:node_modules/、dist/、*.log、.env、.vscode/、.idea/、.DS_Store、coverage/ 等标准 Node + macOS + Linux + IDE 模板。git check-ignore 验证 node_modules/.DS_Store/.env 被忽略,源码与 .dev-state.json 不受影响。15/15 测试通过。",
+      "commit_sha": "c9f54dc",
+      "full_commit_sha": "c9f54dc99cf6eb918a60103c9d2c4ff9b86bf496"
     }
   ],
   "rules": [
@@ -657,5 +673,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "下次运行应继续 id=25 子任务 B2:把纯函数(negamax/quiescence/orderMoves/evaluateBoard/allLegalMoves/applyMoveToBoard/getOpeningBookMove/TT/killers/history)及其依赖常量搬到 worker。state 解耦已在 B1 完成,B2 仅需复制纯函数(无 state 依赖)。策略可选:(a) 在 ai-worker.js 复制一份(代码重复但简单,适合快速 PoC);(b) 抽 src/engine.js 共享文件,index.html + ai-worker.js 都加载它(无 build,DRY)。推荐 (b),需修改 index.html 加 <script src='src/engine.js'></script>,app.js 删除已搬走的定义,ai-worker.js 用 importScripts('src/engine.js')。预估 30 分钟(可拆:B2a 搬常量+棋规 / B2b 搬搜索核心)。"
+  "next_run_hint": "下次运行应做 id=14 加 GitHub Actions CI:创建 .github/workflows/test.yml,每次 push/PR 跑 npm test。Node 22 + cache。预估 15 分钟。"
 }
