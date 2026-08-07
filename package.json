@@ -4,6 +4,14 @@
   "license": "MIT",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "benchmark:ai": "node tests/ai-benchmark.js"
+    "benchmark:ai": "node tests/ai-benchmark.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "prettier": "^3.0.0"
   }
 }

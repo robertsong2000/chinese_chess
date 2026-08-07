@@ -1,0 +1,42 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "es2022": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "script"
+  },
+  "extends": ["eslint:recommended"],
+  "rules": {
+    "no-unused-vars": [
+      "warn",
+      { "vars": "all", "args": "after-used", "ignoreRestSiblings": true }
+    ],
+    "no-empty": ["error", { "allowEmptyCatch": true }],
+    "no-console": "off"
+  },
+  "overrides": [
+    {
+      "files": ["ai-worker.js"],
+      "env": {
+        "browser": true,
+        "worker": true,
+        "es2022": true
+      }
+    },
+    {
+      "files": ["tests/**/*.js"],
+      "env": {
+        "node": true,
+        "commonjs": true,
+        "es2022": true
+      },
+      "parserOptions": {
+        "ecmaVersion": 2022,
+        "sourceType": "script"
+      }
+    }
+  ]
+}
