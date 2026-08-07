@@ -73,6 +73,17 @@ const PAIR_BONUS = {
   horse: { 2: 18 }, // 双马
 };
 
+// 王的安全:士象守卫、出宫惩罚、敌方车/炮近距离威胁
+const KING_SAFETY = {
+  fullAdvisorPair: 15, // 双士
+  fullElephantPair: 12, // 双象
+  completeWall: 10, // 双士+双象(完整防守)额外加分
+  generalOutOfPalace: 30, // 王出宫惩罚
+  generalCrossedRiver: 20, // 王过河(御驾亲征)惩罚
+  chariotPressure: 18, // 敌方车在我王同行/列且距离<=3
+  cannonPressure: 12, // 敌方炮在我王同行/列且距离 2-4
+};
+
 const MOBILITY_VALUE = {
   general: 0,
   advisor: 1,
@@ -1009,6 +1020,41 @@ function evaluateBoard(board, aiSide) {
   }
   if (isInCheck(board, opposite(aiSide))) score += 120;
   if (isInCheck(board, aiSide)) score -= 160;
+  // 王的安全(士象守卫 + 出宫惩罚 + 敌方近距离车炮威胁)
+  score += kingSafetyScore(board, aiSide);
+  score -= kingSafetyScore(board, opposite(aiSide));
+  return score;
+}
+
+// 王的安全评估:负数表示该方王处于风险,正数表示防守稳固。
+function kingSafetyScore(board, side) {
+  const general = board.find((p) => p.alive && p.side === side && p.type === TYPES.GENERAL);
+  if (!general) return 0;
+  let score = 0;
+  // 士象守卫
+  const advisors = board.filter((p) => p.alive && p.type === TYPES.ADVISOR && p.side === side).length;
+  const elephants = board.filter((p) => p.alive && p.type === TYPES.ELEPHANT && p.side === side).length;
+  if (advisors === 2) score += KING_SAFETY.fullAdvisorPair;
+  if (elephants === 2) score += KING_SAFETY.fullElephantPair;
+  if (advisors === 2 && elephants === 2) score += KING_SAFETY.completeWall;
+  // 王出宫 / 过河惩罚
+  if (!palaceContains(side, general.x, general.y)) score -= KING_SAFETY.generalOutOfPalace;
+  if (crossedRiver(side, general.y)) score -= KING_SAFETY.generalCrossedRiver;
+  // 敌方车/炮对王的近距离威胁(同行/列,半威胁:下一手可能形成将军)
+  for (const enemy of livePieces(board)) {
+    if (enemy.side === side) continue;
+    if (enemy.type !== TYPES.CHARIOT && enemy.type !== TYPES.CANNON) continue;
+    const dx = Math.abs(enemy.x - general.x);
+    const dy = Math.abs(enemy.y - general.y);
+    if (dx !== 0 && dy !== 0) continue;
+    const dist = dx + dy;
+    if (enemy.type === TYPES.CHARIOT) {
+      if (dist > 0 && dist <= 3) score -= KING_SAFETY.chariotPressure;
+    } else {
+      // 炮:距离 2-4(距离 1 是贴身无架、距离 2-4 是常见有架位)
+      if (dist >= 2 && dist <= 4) score -= KING_SAFETY.cannonPressure;
+    }
+  }
   return score;
 }
 
