@@ -979,13 +979,20 @@ function evaluateBoard(board, aiSide) {
 function positionalBonus(piece, x = piece?.x, y = piece?.y) {
   if (!piece) return 0;
   const table = POSITION_BONUS[piece.type];
+  let bonus;
   if (table) {
     const row = piece.side === SIDES.RED ? y : 9 - y;
-    return table[row]?.[x] || 0;
+    bonus = table[row]?.[x] || 0;
+  } else {
+    const center = Math.max(0, 4 - Math.abs(x - 4)) * 4;
+    const palace = palaceContains(piece.side, x, y) ? 8 : 0;
+    bonus = center + palace;
   }
-  const center = Math.max(0, 4 - Math.abs(x - 4)) * 4;
-  const palace = palaceContains(piece.side, x, y) ? 8 : 0;
-  return center + palace;
+  // 过河兵额外加分:过河后可左右走 + 向前,威胁大幅增加
+  if (piece.type === TYPES.SOLDIER && crossedRiver(piece.side, y)) {
+    bonus += 30;
+  }
+  return bonus;
 }
 
 function buildControlMaps(board) {
