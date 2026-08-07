@@ -262,7 +262,7 @@
       "phase": 1.5,
       "category": "棋力-二级冲刺",
       "title": "Web Workers 重构 AI 思考",
-      "description": "[已拆分] 把 AI 搜索逻辑移到 Web Worker。\n已完成:\n  - 子任务 A:抽出 runAISearch(s) 纯函数 + ai-worker.js 骨架(commit 80a653c)\n  - 子任务 B-mini:createAIWorker() 工厂 + ready/ping/pong/边界检查 + 5 个 smoke 测试(commit b0d8718)\n  - 子任务 C-min:chooseAIMoveAsync + scheduleAI 异步路径,worker 失败/超时 fallback 同步,14/14 测试通过(commit 652c029)\n剩余:\n  - 子任务 B-full:把 negamax/quiescence/orderMoves/evaluateBoard/allLegalMoves/applyMoveToBoard/getOpeningBookMove/TT/killers/history 等纯函数搬到 worker,并参数化 capturedValue/positionRepetitionCount/rootCyclePenalty 的 state 依赖。预估 30 分钟(可继续拆)。\n  - 子任务 C-full:浏览器打开 AI_WORKER_ENABLED=true + 在真实 Worker 环境验证 hard 模式 UI 不卡。预估 10 分钟。\n验收:npm test 通过 + 浏览器加载无错 + hard 模式思考时 UI 仍可响应。",
+      "description": "[已拆分] 把 AI 搜索逻辑移到 Web Worker。\n已完成:\n  - 子任务 A:抽出 runAISearch(s) 纯函数 + ai-worker.js 骨架(commit 80a653c)\n  - 子任务 B-mini:createAIWorker() 工厂 + ready/ping/pong/边界检查 + 5 个 smoke 测试(commit b0d8718)\n  - 子任务 C-min:chooseAIMoveAsync + scheduleAI 异步路径,worker 失败/超时 fallback 同步,14/14 测试通过(commit 652c029)\n  - 子任务 B1:state 依赖参数化 — capturedValue/positionRepetitionCount/rootCyclePenalty/preferNonRepeatingMoves 全部接受可选参数,默认指向 state 保持向后兼容;runAISearch 内部显式传 rootCycleOpts;新增 1 个回归测试验证参数化与默认参数行为一致(15/15 pass,commit 67474a0)\n剩余:\n  - 子任务 B2:把纯函数(negamax/quiescence/orderMoves/evaluateBoard/allLegalMoves/applyMoveToBoard/getOpeningBookMove/TT/killers/history)搬到 worker 端(可独立复制或抽 src/engine.js 共享)。state 解耦已在 B1 完成,B2 仅需复制纯函数。预估 30 分钟。\n  - 子任务 C-full:浏览器打开 AI_WORKER_ENABLED=true + 在真实 Worker 环境验证 hard 模式 UI 不卡。预估 10 分钟。\n验收:npm test 通过 + 浏览器加载无错 + hard 模式思考时 UI 仍可响应。",
       "files": [
         "app.js",
         "ai-worker.js"
@@ -270,7 +270,7 @@
       "priority": "P0",
       "status": "in_progress",
       "estimated_min": 30,
-      "attempts": 3,
+      "attempts": 4,
       "completed_at": null,
       "commit_sha": null
     },
@@ -625,6 +625,13 @@
       "action": "partial",
       "summary": "Web Worker 子任务 C-min:app.js 加 chooseAIMoveAsync(s, callback)— Worker 可用走 worker-first-then-sync-fallback,无 Worker 环境(node 测试)立即同步 callback。worker 端 ready/result/error 全处理 + 超时保护 + onerror 兜底,任何异常都 fallback 到 chooseAIMove()。scheduleAI 改异步路径。新增测试:node 环境 chooseAIMoveAsync 必走同步 fallback 且返回合法走法。14/14 测试通过。剩余 B-full(搬运搜索代码到 worker)+ C-full(浏览器验证)。",
       "commit_sha": "652c029"
+    },
+    {
+      "timestamp": "2026-08-08T04:14:01+08:00",
+      "todo_id": 25,
+      "action": "partial",
+      "summary": "Web Worker 子任务 B1:state 依赖参数化 — capturedValue/positionRepetitionCount/rootCyclePenalty/preferNonRepeatingMoves 全部加可选参数,默认指向 state 保持兼容;runAISearch 内显式 rootCycleOpts={currentState:s,snapshots,moveHistory}。新增 1 个回归测试验证参数化与默认参数行为一致(15/15 pass)。B1 完成,为 B2(纯函数搬运)扫清 state 依赖障碍。",
+      "commit_sha": "67474a0"
     }
   ],
   "rules": [
@@ -636,5 +643,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "下次运行应继续 id=25 子任务 B-full:把纯函数(negamax/quiescence/orderMoves/evaluateBoard/allLegalMoves/applyMoveToBoard/getOpeningBookMove/TT/killers/history)搬到 ai-worker.js,并参数化 capturedValue/positionRepetitionCount/rootCyclePenalty 的 state 依赖。子任务 B-full 估 30 分钟,可再拆成 B1(常量+数据结构搬运)+ B2(搜索核心搬运)。"
+  "next_run_hint": "下次运行应继续 id=25 子任务 B2:把纯函数(negamax/quiescence/orderMoves/evaluateBoard/allLegalMoves/applyMoveToBoard/getOpeningBookMove/TT/killers/history)及其依赖常量搬到 worker。state 解耦已在 B1 完成,B2 仅需复制纯函数(无 state 依赖)。策略可选:(a) 在 ai-worker.js 复制一份(代码重复但简单,适合快速 PoC);(b) 抽 src/engine.js 共享文件,index.html + ai-worker.js 都加载它(无 build,DRY)。推荐 (b),需修改 index.html 加 <script src='src/engine.js'></script>,app.js 删除已搬走的定义,ai-worker.js 用 importScripts('src/engine.js')。预估 30 分钟(可拆:B2a 搬常量+棋规 / B2b 搬搜索核心)。"
 }
