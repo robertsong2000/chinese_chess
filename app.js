@@ -1081,7 +1081,8 @@ function runAISearch(s) {
     if (bookMove) return bookMove;
   }
   if (s.aiDifficulty === "easy") return pickEasyMove(moves, s.board, s.currentSide);
-  const rootMoves = preferNonRepeatingMoves(s.board, moves, s.currentSide);
+  const rootCycleOpts = { currentState: s, snapshots: s.snapshots, moveHistory: s.moveHistory };
+  const rootMoves = preferNonRepeatingMoves(s.board, moves, s.currentSide, rootCycleOpts);
   const startTime = performance.now();
   const baseBudget = TIME_BUDGET_MS[s.aiDifficulty] || TIME_BUDGET_MS.normal;
   const factor = s.aiDifficulty === "hard"
@@ -1116,7 +1117,7 @@ function runAISearch(s) {
         1,
         killers,
         history,
-      ) - rootCyclePenalty(s.board, move, s.currentSide);
+      ) - rootCyclePenalty(s.board, move, s.currentSide, rootCycleOpts);
       if (score > bestScore) {
         bestScore = score;
         bestAtDepth = move;
@@ -1166,8 +1167,9 @@ function pickEasyMove(moves, board = state.board, side = state.currentSide) {
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
-function capturedValue(move) {
-  const piece = state.board.find((p) => p.id === move.capturedPieceId);
+// board 默认 state.board,保持向后兼容;worker 端可显式传 ctx.board 解耦
+function capturedValue(move, board = state.board) {
+  const piece = board.find((p) => p.id === move.capturedPieceId);
   return piece ? PIECE_VALUE[piece.type] : 0;
 }
 
@@ -1187,10 +1189,12 @@ function positionKey(board, side) {
   return `${side}:${canonicalBoardKey(board)}`;
 }
 
-function positionRepetitionCount(board, side) {
+// currentState/snapshots 默认指向 state,保持向后兼容;
+// worker 端可显式传 ctx 当前局面与历史快照,与全局 state 解耦
+function positionRepetitionCount(board, side, currentState = state, snapshots = currentState.snapshots) {
   const key = positionKey(board, side);
-  let count = positionKey(state.board, state.currentSide) === key ? 1 : 0;
-  for (const snapshot of state.snapshots) {
+  let count = positionKey(currentState.board, currentState.currentSide) === key ? 1 : 0;
+  for (const snapshot of snapshots) {
     if (positionKey(snapshot.board, snapshot.currentSide) === key) count += 1;
   }
   return count;
@@ -1207,11 +1211,16 @@ function isDirectReversal(move, previousMove) {
   );
 }
 
-function rootCyclePenalty(board, move, side) {
+// opts.currentState / opts.snapshots / opts.moveHistory 默认指向 state,保持向后兼容;
+// worker 端可显式传 ctx 完整解耦。
+function rootCyclePenalty(board, move, side, opts = {}) {
+  const currentState = opts.currentState || state;
+  const snapshots = opts.snapshots || currentState.snapshots;
+  const moveHistory = opts.moveHistory || currentState.moveHistory;
   const nextBoard = applyMoveToBoard(board, move);
-  const repetitions = positionRepetitionCount(nextBoard, opposite(side));
+  const repetitions = positionRepetitionCount(nextBoard, opposite(side), currentState, snapshots);
   let penalty = repetitions * REPEATED_POSITION_PENALTY;
-  const recentAIMoves = state.moveHistory.filter((item) => item.byAI).slice(-4);
+  const recentAIMoves = moveHistory.filter((item) => item.byAI).slice(-4);
   if (isDirectReversal(move, recentAIMoves.at(-1))) penalty += DIRECT_REVERSAL_PENALTY;
   for (const recent of recentAIMoves) {
     if (recent.pieceId !== move.pieceId) continue;
@@ -1222,9 +1231,9 @@ function rootCyclePenalty(board, move, side) {
   return penalty;
 }
 
-function preferNonRepeatingMoves(board, moves, side) {
+function preferNonRepeatingMoves(board, moves, side, opts = {}) {
   if (moves.length <= 1) return moves;
-  const nonRepeating = moves.filter((move) => rootCyclePenalty(board, move, side) < CYCLE_FILTER_PENALTY);
+  const nonRepeating = moves.filter((move) => rootCyclePenalty(board, move, side, opts) < CYCLE_FILTER_PENALTY);
   return nonRepeating.length ? nonRepeating : moves;
 }
 

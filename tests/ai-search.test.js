@@ -114,3 +114,69 @@ test("quiescence searches legal evasions instead of standing pat while in check"
   assert.equal(result.applied, 1);
   assert.notEqual(result.score, 100);
 });
+
+// 子任务 B1:state 依赖参数化(为 Web Worker 抽取做前置)
+// 验证 capturedValue / positionRepetitionCount / rootCyclePenalty / preferNonRepeatingMoves
+// 在显式传入与默认 state 等价的参数时,行为完全一致。
+test("state-derived helpers behave identically with explicit params vs default state", () => {
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    // 构造一个带 history 与 snapshots 的中盘状态
+    state = createGame(SIDES.RED, "hard");
+    state.status = "playing";
+    state.currentSide = SIDES.BLACK;
+    // 模拟两步 AI 走过的历史(便于 rootCyclePenalty 的 recent-route 分支)
+    state.moveHistory.push(
+      { pieceId: 1, fromX: 0, fromY: 0, toX: 1, toY: 0, byAI: true, capturedPieceId: null },
+      { pieceId: 2, fromX: 8, fromY: 0, toX: 7, toY: 0, byAI: false, capturedPieceId: null },
+    );
+    state.snapshots.push({
+      board: state.board.map((row) => row),
+      currentSide: SIDES.RED,
+    });
+
+    const moves = allLegalMoves(state.board, state.currentSide);
+    if (!moves.length) return { ok: false, reason: "no-moves" };
+    const sample = moves[0];
+
+    // capturedValue:默认 state.board vs 显式传 state.board
+    const cvDefault = capturedValue(sample);
+    const cvExplicit = capturedValue(sample, state.board);
+
+    // positionRepetitionCount:默认 vs 显式 (state, state.snapshots)
+    const prcDefault = positionRepetitionCount(state.board, state.currentSide);
+    const prcExplicit = positionRepetitionCount(
+      state.board, state.currentSide, state, state.snapshots,
+    );
+
+    // rootCyclePenalty:默认 vs 显式 opts
+    const rcpDefault = rootCyclePenalty(state.board, sample, state.currentSide);
+    const rcpExplicit = rootCyclePenalty(state.board, sample, state.currentSide, {
+      currentState: state,
+      snapshots: state.snapshots,
+      moveHistory: state.moveHistory,
+    });
+
+    // preferNonRepeatingMoves:默认 vs 显式 opts
+    const pnmDefault = preferNonRepeatingMoves(state.board, moves, state.currentSide);
+    const pnmExplicit = preferNonRepeatingMoves(state.board, moves, state.currentSide, {
+      currentState: state,
+      snapshots: state.snapshots,
+      moveHistory: state.moveHistory,
+    });
+
+    return {
+      cvMatch: cvDefault === cvExplicit,
+      prcMatch: prcDefault === prcExplicit,
+      rcpMatch: rcpDefault === rcpExplicit,
+      pnmMatch: pnmDefault.length === pnmExplicit.length,
+      movesCount: moves.length,
+    };
+  })()`);
+
+  assert.equal(result.cvMatch, true, "capturedValue should match");
+  assert.equal(result.prcMatch, true, "positionRepetitionCount should match");
+  assert.equal(result.rcpMatch, true, "rootCyclePenalty should match");
+  assert.equal(result.pnmMatch, true, "preferNonRepeatingMoves length should match");
+  assert.ok(result.movesCount > 0);
+});
