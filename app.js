@@ -40,7 +40,7 @@ const PIECE_VALUE = {
   soldier: 100,
 };
 
-const SEARCH_DEPTH = { easy: 1, normal: 2, hard: 4 };
+const SEARCH_DEPTH = { easy: 1, normal: 2, hard: 5 };
 const QUIESCENCE_DEPTH = 3;
 const MATE_SCORE = 30000;
 const REPEATED_POSITION_PENALTY = 12000;
@@ -54,6 +54,9 @@ const KILLER_SLOTS = 2;
 const HISTORY_MAX_BONUS = 6000;
 const HISTORY_BOARD_SQUARES = 90;
 const HISTORY_SATURATION_CAP = HISTORY_MAX_BONUS * 4;
+const LMR_MIN_DEPTH = 3;
+const LMR_FULL_MOVE_COUNT = 3;
+const LMR_REDUCTION = 1;
 
 const MOBILITY_VALUE = {
   general: 0,
@@ -892,8 +895,22 @@ function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), dea
   let best = -Infinity;
   let didCut = false;
   const killersAtPly = killers ? killers[Math.min(ply, killers.length - 1)] : null;
-  for (const move of orderMoves(board, moves, side, aiSide, null, killersAtPly, history)) {
-    const score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history);
+  const orderedMoves = orderMoves(board, moves, side, aiSide, null, killersAtPly, history);
+  const canReduce = depth >= LMR_MIN_DEPTH && orderedMoves.length > LMR_FULL_MOVE_COUNT;
+  for (let i = 0; i < orderedMoves.length; i += 1) {
+    const move = orderedMoves[i];
+    let score;
+    const isTactical = Boolean(move.capturedPieceId);
+    if (canReduce && i >= LMR_FULL_MOVE_COUNT && !isTactical) {
+      const probeScore = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1 - LMR_REDUCTION, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history);
+      if (probeScore > alpha && probeScore < beta) {
+        score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history);
+      } else {
+        score = probeScore;
+      }
+    } else {
+      score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history);
+    }
     best = Math.max(best, score);
     alpha = Math.max(alpha, score);
     if (alpha >= beta) {
