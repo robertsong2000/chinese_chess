@@ -610,7 +610,7 @@
       "todo_id": 25,
       "action": "partial",
       "summary": "Web Worker 重构子任务 A:抽出 runAISearch(s) 纯函数(chooseAIMove 仅转发),为 worker 化做准备;新建 ai-worker.js 骨架(postMessage 接口契约 + 搬运 TODO)。8/8 测试通过,语法检查通过。TODO 标 in_progress,description 更新后续子任务 B/C。",
-      "commit_sha": null
+      "commit_sha": "80a653c"
     }
   ],
   "rules": [
