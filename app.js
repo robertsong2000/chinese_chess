@@ -57,6 +57,8 @@ const HISTORY_SATURATION_CAP = HISTORY_MAX_BONUS * 4;
 const LMR_MIN_DEPTH = 3;
 const LMR_FULL_MOVE_COUNT = 3;
 const LMR_REDUCTION = 1;
+const NULL_MOVE_MIN_DEPTH = 3;
+const NULL_MOVE_REDUCTION = 2;
 
 const MOBILITY_VALUE = {
   general: 0,
@@ -876,7 +878,7 @@ function boardKey(board, side, depth) {
   return `${side}:${depth}:${canonicalBoardKey(board)}`;
 }
 
-function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), deadline = Infinity, ply = 0, killers = null, history = null) {
+function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), deadline = Infinity, ply = 0, killers = null, history = null, allowNull = true) {
   if (performance.now() > deadline) return evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
   if (depth === 0) {
     const moves = allLegalMoves(board, side);
@@ -888,6 +890,12 @@ function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), dea
   const key = boardKey(board, side, depth);
   const cached = cache.get(key);
   if (cached && cached.depth >= depth) return cached.score;
+  if (allowNull && depth >= NULL_MOVE_MIN_DEPTH && !isInCheck(board, side) && beta < Infinity && beta > -Infinity) {
+    const nullScore = -negamax(board, opposite(side), depth - 1 - NULL_MOVE_REDUCTION, -beta, -beta + 1, aiSide, cache, deadline, ply + 1, killers, history, false);
+    if (nullScore >= beta) {
+      return beta;
+    }
+  }
   const moves = allLegalMoves(board, side);
   if (moves.length === 0) {
     return isInCheck(board, side) ? -MATE_SCORE - depth : -8000;
@@ -902,14 +910,14 @@ function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), dea
     let score;
     const isTactical = Boolean(move.capturedPieceId);
     if (canReduce && i >= LMR_FULL_MOVE_COUNT && !isTactical) {
-      const probeScore = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1 - LMR_REDUCTION, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history);
+      const probeScore = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1 - LMR_REDUCTION, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history, true);
       if (probeScore > alpha && probeScore < beta) {
-        score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history);
+        score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history, true);
       } else {
         score = probeScore;
       }
     } else {
-      score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history);
+      score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history, true);
     }
     best = Math.max(best, score);
     alpha = Math.max(alpha, score);
