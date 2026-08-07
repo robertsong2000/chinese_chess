@@ -987,26 +987,36 @@ function allocateTimeFactor(board, side, moveCount) {
   return factor;
 }
 
+// 选择 AI 走法:主线程入口。当前同步实现;后续 Web Worker 化时,
+// 此函数将转发到 runAISearch(state),worker 路径会通过 postMessage 序列化 state。
 function chooseAIMove() {
-  const moves = allLegalMoves(state.board, state.currentSide);
+  return runAISearch(state);
+}
+
+// 纯函数版 AI 搜索:接受 state 引用,返回选定的走法。
+// 抽出的目的:为 Web Worker 化做准备(worker 无法访问全局 state,需显式传入)。
+// 注意:内部辅助函数(capturedValue/positionRepetitionCount/rootCyclePenalty)目前
+// 仍依赖全局 state,后续子任务会进一步参数化以完成 worker 解耦。
+function runAISearch(s) {
+  const moves = allLegalMoves(s.board, s.currentSide);
   if (!moves.length) return null;
-  if (state.aiDifficulty !== "easy") {
-    const bookMove = getOpeningBookMove(moves, state.moveHistory);
+  if (s.aiDifficulty !== "easy") {
+    const bookMove = getOpeningBookMove(moves, s.moveHistory);
     if (bookMove) return bookMove;
   }
-  if (state.aiDifficulty === "easy") return pickEasyMove(moves, state.board, state.currentSide);
-  const rootMoves = preferNonRepeatingMoves(state.board, moves, state.currentSide);
+  if (s.aiDifficulty === "easy") return pickEasyMove(moves, s.board, s.currentSide);
+  const rootMoves = preferNonRepeatingMoves(s.board, moves, s.currentSide);
   const startTime = performance.now();
-  const baseBudget = TIME_BUDGET_MS[state.aiDifficulty] || TIME_BUDGET_MS.normal;
-  const factor = state.aiDifficulty === "hard"
-    ? allocateTimeFactor(state.board, state.currentSide, rootMoves.length)
+  const baseBudget = TIME_BUDGET_MS[s.aiDifficulty] || TIME_BUDGET_MS.normal;
+  const factor = s.aiDifficulty === "hard"
+    ? allocateTimeFactor(s.board, s.currentSide, rootMoves.length)
     : 1;
   let deadline = startTime + Math.min(baseBudget * factor, TIME_HARD_CAP_MS);
-  let maxDepth = SEARCH_DEPTH[state.aiDifficulty] || SEARCH_DEPTH.normal;
+  let maxDepth = SEARCH_DEPTH[s.aiDifficulty] || SEARCH_DEPTH.normal;
   const tt = createTranspositionTable();
   const killers = createKillerTable();
   const history = createHistoryTable();
-  let best = orderMoves(state.board, rootMoves, state.currentSide, state.currentSide)[0];
+  let best = orderMoves(s.board, rootMoves, s.currentSide, s.currentSide)[0];
 
   const scoreHistory = [];
   let stableRun = 0;
@@ -1015,22 +1025,22 @@ function chooseAIMove() {
   for (let depth = 1; depth <= maxDepth; depth += 1) {
     let bestAtDepth = best;
     let bestScore = -Infinity;
-    const ordered = orderMoves(state.board, rootMoves, state.currentSide, state.currentSide, best);
+    const ordered = orderMoves(s.board, rootMoves, s.currentSide, s.currentSide, best);
     for (const move of ordered) {
       if (performance.now() > deadline) break;
       const score = -negamax(
-        applyMoveToBoard(state.board, move),
-        opposite(state.currentSide),
+        applyMoveToBoard(s.board, move),
+        opposite(s.currentSide),
         depth - 1,
         -Infinity,
         Infinity,
-        state.currentSide,
+        s.currentSide,
         tt,
         deadline,
         1,
         killers,
         history,
-      ) - rootCyclePenalty(state.board, move, state.currentSide);
+      ) - rootCyclePenalty(s.board, move, s.currentSide);
       if (score > bestScore) {
         bestScore = score;
         bestAtDepth = move;
@@ -1040,7 +1050,7 @@ function chooseAIMove() {
     best = bestAtDepth;
 
     // === 时间管理:仅 hard 启用 ===
-    if (state.aiDifficulty === "hard") {
+    if (s.aiDifficulty === "hard") {
       const prevScore = scoreHistory.length ? scoreHistory[scoreHistory.length - 1] : undefined;
       scoreHistory.push(bestScore);
       if (prevScore !== undefined) {

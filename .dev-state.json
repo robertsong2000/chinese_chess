@@ -251,26 +251,26 @@
         "app.js"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 25,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T01:12:49+08:00",
+      "commit_sha": "73eb5b3"
     },
     {
       "id": 25,
       "phase": 1.5,
       "category": "棋力-二级冲刺",
       "title": "Web Workers 重构 AI 思考",
-      "description": "把 AI 搜索逻辑移到 Web Worker。主线程不卡,可把 hard 模式搜索深度从 4 提到 6-7。改动:新建 ai-worker.js + app.js 改成异步等待 worker 返回。验收:npm test 通过(注意:测试可能需要 mock worker 环境)。预估 30 分钟。",
+      "description": "[已拆分] 把 AI 搜索逻辑移到 Web Worker。本次完成子任务 A:抽出 runAISearch(s) 纯函数(接受 state 引用,chooseAIMove 仅做转发)+ 创建 ai-worker.js 骨架(postMessage 接口契约 + 详细搬运 TODO)。下次子任务 B:把 negamax/quiescence/orderMoves/evaluateBoard/allLegalMoves/applyMoveToBoard/getOpeningBookMove/TT/killers/history 等纯函数搬到 worker,并参数化 capturedValue/positionRepetitionCount/rootCyclePenalty 的 state 依赖。下次子任务 C:app.js scheduleAI 加 Worker 检测分支(浏览器异步 / node 同步回退)。验收:npm test 通过 + 浏览器加载无错。预估剩余 40 分钟(分 2 次)。",
       "files": [
         "app.js",
         "ai-worker.js"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "in_progress",
       "estimated_min": 30,
-      "attempts": 0,
+      "attempts": 1,
       "completed_at": null,
       "commit_sha": null
     },
@@ -284,11 +284,11 @@
         "app.js"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 25,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T01:43:21+08:00",
+      "commit_sha": "153ee94"
     },
     {
       "id": 27,
@@ -300,11 +300,11 @@
         "app.js"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 30,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T02:17:31+08:00",
+      "commit_sha": "f45fd70"
     },
     {
       "id": 11,
@@ -583,6 +583,34 @@
       "action": "completed",
       "summary": "Transposition table:Zobrist hashing(splitmix32 固定种子,90 sq × 14 type-side + side key)+ createTranspositionTable/ttProbe/ttStore(EXACT/LOWER/UPPER flag,容量 200k 满则清空);negamax 集成 TT probe + store,替换原 (side,depth,canonicalBoardKey) 字符串 cache;null-move beta cutoff / alpha>=beta cutoff / 完整搜索三种情况分别存 LOWER/LOWER/EXACT|UPPER;orderMoves 接 ttBestMoveKey 给 +9000 bonus;chooseAIMove 改用 tt。8/8 测试通过,hard depth=5 1.12s 内。",
       "commit_sha": "72e629c"
+    },
+    {
+      "timestamp": "2026-08-08T01:12:49+08:00",
+      "todo_id": 24,
+      "action": "completed",
+      "summary": "PVS 改造 negamax:首走法 full window,其余走法用 zero-window (-alpha-1,-alpha) 试探;LMR 走法先用 reduced depth+zero-window,改进 alpha 则 full depth+zero-window,仍改进则 full depth+full window。8/8 测试通过,hard 模式仍然在合理时间内。",
+      "commit_sha": "73eb5b3"
+    },
+    {
+      "timestamp": "2026-08-08T01:43:21+08:00",
+      "todo_id": 26,
+      "action": "completed",
+      "summary": "时间管理:加 allocateTimeFactor(走法数 ≤8→1.6 / 9-15→1.3 / 16-25→1.0 / >25→0.85,子力<8000 额外 *1.2);chooseAIMove 用 startTime+baseBudget*factor;仅 hard 启用稳定性早停(连续 2 深度差<30 + depth>=4 提前停)+ 关键局面深度延伸(最后深度改进>50 + 时间够则 +1 ply,最多 +2);baseBudget 维持 1100/520 不动以兼容 benchmark timeScale。8/8 测试通过,hard 单步 962ms。",
+      "commit_sha": "153ee94"
+    },
+    {
+      "timestamp": "2026-08-08T02:17:31+08:00",
+      "todo_id": 27,
+      "action": "completed",
+      "summary": "扩展开局库 5→22 个变着:中炮(顺炮/列炮/反宫马/屏风马)、仙人指路(对卒底炮/起马/中炮)、飞相局、起马局、过宫炮、仕角炮、五六炮、五七炮等。每个 8 步(4 回合)。新增验证脚本确保 176/176 步全合法。OPENING_BOOK_MAX_PLIES 10→12。",
+      "commit_sha": "f45fd70"
+    },
+    {
+      "timestamp": "2026-08-08T02:43:36+08:00",
+      "todo_id": 25,
+      "action": "partial",
+      "summary": "Web Worker 重构子任务 A:抽出 runAISearch(s) 纯函数(chooseAIMove 仅转发),为 worker 化做准备;新建 ai-worker.js 骨架(postMessage 接口契约 + 搬运 TODO)。8/8 测试通过,语法检查通过。TODO 标 in_progress,description 更新后续子任务 B/C。",
+      "commit_sha": null
     }
   ],
   "rules": [
@@ -594,5 +622,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "下次运行应从 id=24 开始(Principal Variation Search),phase 1.5 第 2/5"
+  "next_run_hint": "下次运行应从 id=27 开始(扩展开局库到 20+ 变化),phase 1.5 第 4/5。id=25 (Web Workers) 留待专项处理。"
 }
