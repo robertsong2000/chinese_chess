@@ -364,11 +364,11 @@
         ".github/workflows/test.yml"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 15,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T06:11:56+08:00",
+      "commit_sha": "78deaaf"
     },
     {
       "id": 15,
@@ -662,6 +662,13 @@
       "summary": "加 .gitignore:node_modules/、dist/、*.log、.env、.vscode/、.idea/、.DS_Store、coverage/ 等标准 Node + macOS + Linux + IDE 模板。git check-ignore 验证 node_modules/.DS_Store/.env 被忽略,源码与 .dev-state.json 不受影响。15/15 测试通过。",
       "commit_sha": "c9f54dc",
       "full_commit_sha": "c9f54dc99cf6eb918a60103c9d2c4ff9b86bf496"
+    },
+    {
+      "timestamp": "2026-08-08T06:11:56+08:00",
+      "todo_id": 14,
+      "action": "completed",
+      "summary": "加 GitHub Actions CI(.github/workflows/test.yml):push/PR 触发,Node 20/22 矩阵跑 npm test + benchmark smoke(continue-on-error)。15/15 测试通过。",
+      "commit_sha": "78deaaf"
     }
   ],
   "rules": [
