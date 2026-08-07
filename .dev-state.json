@@ -239,7 +239,7 @@
       "estimated_min": 25,
       "attempts": 1,
       "completed_at": "2026-08-08T00:43:23+08:00",
-      "commit_sha": "pending"
+      "commit_sha": "72e629c"
     },
     {
       "id": 24,
@@ -582,7 +582,7 @@
       "todo_id": 23,
       "action": "completed",
       "summary": "Transposition table:Zobrist hashing(splitmix32 固定种子,90 sq × 14 type-side + side key)+ createTranspositionTable/ttProbe/ttStore(EXACT/LOWER/UPPER flag,容量 200k 满则清空);negamax 集成 TT probe + store,替换原 (side,depth,canonicalBoardKey) 字符串 cache;null-move beta cutoff / alpha>=beta cutoff / 完整搜索三种情况分别存 LOWER/LOWER/EXACT|UPPER;orderMoves 接 ttBestMoveKey 给 +9000 bonus;chooseAIMove 改用 tt。8/8 测试通过,hard depth=5 1.12s 内。",
-      "commit_sha": "pending"
+      "commit_sha": "72e629c"
     }
   ],
   "rules": [
