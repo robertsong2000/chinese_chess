@@ -1024,19 +1024,27 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
   const killersAtPly = killers ? killers[Math.min(ply, killers.length - 1)] : null;
   const orderedMoves = orderMoves(board, moves, side, aiSide, null, killersAtPly, history, ttBestMoveKey);
   const canReduce = depth >= LMR_MIN_DEPTH && orderedMoves.length > LMR_FULL_MOVE_COUNT;
+  // Principal Variation Search (PVS):首走法(走法排序后,通常是 TT move/killer)用 full window;
+  // 其余走法用 zero-window (-alpha-1, -alpha) 试探,如果落在 (alpha, beta) 之间再 re-search with full window。
+  // 与 LMR 结合:可被 reduce 的走法先以 reduced depth + zero-window 搜索,改进 alpha 后再以 full depth + zero-window,
+  // 仍改进 alpha 则以 full depth + full window 收尾。
   for (let i = 0; i < orderedMoves.length; i += 1) {
     const move = orderedMoves[i];
     let score;
     const isTactical = Boolean(move.capturedPieceId);
-    if (canReduce && i >= LMR_FULL_MOVE_COUNT && !isTactical) {
-      const probeScore = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1 - LMR_REDUCTION, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
-      if (probeScore > alpha && probeScore < beta) {
-        score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
-      } else {
-        score = probeScore;
-      }
+    const childBoard = applyMoveToBoard(board, move);
+    if (i === 0) {
+      score = -negamax(childBoard, opposite(side), depth - 1, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
     } else {
-      score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
+      const canLMR = canReduce && i >= LMR_FULL_MOVE_COUNT && !isTactical;
+      const probeDepth = canLMR ? depth - 1 - LMR_REDUCTION : depth - 1;
+      score = -negamax(childBoard, opposite(side), probeDepth, -alpha - 1, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
+      if (canLMR && score > alpha) {
+        score = -negamax(childBoard, opposite(side), depth - 1, -alpha - 1, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
+      }
+      if (score > alpha && score < beta) {
+        score = -negamax(childBoard, opposite(side), depth - 1, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
+      }
     }
     if (score > best) {
       best = score;
