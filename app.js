@@ -47,6 +47,10 @@ const REPEATED_POSITION_PENALTY = 12000;
 const DIRECT_REVERSAL_PENALTY = 2600;
 const RECENT_ROUTE_PENALTY = 420;
 const CYCLE_FILTER_PENALTY = DIRECT_REVERSAL_PENALTY;
+const KILLER_BONUS_MAIN = 8000;
+const KILLER_BONUS_SECOND = 7000;
+const MAX_KILLER_PLY = 32;
+const KILLER_SLOTS = 2;
 
 const MOBILITY_VALUE = {
   general: 0,
@@ -674,6 +678,7 @@ function chooseAIMove() {
   const maxDepth = SEARCH_DEPTH[state.aiDifficulty] || SEARCH_DEPTH.normal;
   const deadline = performance.now() + (state.aiDifficulty === "hard" ? 1100 : 520);
   const cache = new Map();
+  const killers = createKillerTable();
   const rootMoves = preferNonRepeatingMoves(state.board, moves, state.currentSide);
   let best = orderMoves(state.board, rootMoves, state.currentSide, state.currentSide)[0];
 
@@ -692,6 +697,8 @@ function chooseAIMove() {
         state.currentSide,
         cache,
         deadline,
+        1,
+        killers,
       ) - rootCyclePenalty(state.board, move, state.currentSide);
       if (score > bestScore) {
         bestScore = score;
@@ -776,11 +783,15 @@ function preferNonRepeatingMoves(board, moves, side) {
   return nonRepeating.length ? nonRepeating : moves;
 }
 
-function moveOrderingScore(board, move, side, aiSide, preferredMove = null) {
+function moveOrderingScore(board, move, side, aiSide, preferredMove = null, killersAtPly = null) {
   let score = 0;
   if (preferredMove && move.pieceId === preferredMove.pieceId && move.toX === preferredMove.toX && move.toY === preferredMove.toY) score += 100000;
   if (move.capturedPieceId) {
     score += 50000 + pieceValueOnBoard(board, move.capturedPieceId) * 12 - pieceValueOnBoard(board, move.pieceId);
+  } else if (killersAtPly) {
+    const key = killerKey(move);
+    if (killersAtPly[0] === key) score += KILLER_BONUS_MAIN;
+    else if (killersAtPly[1] === key) score += KILLER_BONUS_SECOND;
   }
   const next = applyMoveToBoard(board, move);
   if (isInCheck(next, opposite(side))) score += 9000;
@@ -789,18 +800,38 @@ function moveOrderingScore(board, move, side, aiSide, preferredMove = null) {
   return score;
 }
 
-function orderMoves(board, moves, side, aiSide, preferredMove = null) {
+function orderMoves(board, moves, side, aiSide, preferredMove = null, killersAtPly = null) {
   return moves
-    .map((move) => ({ move, score: moveOrderingScore(board, move, side, aiSide, preferredMove) }))
+    .map((move) => ({ move, score: moveOrderingScore(board, move, side, aiSide, preferredMove, killersAtPly) }))
     .sort((a, b) => b.score - a.score)
     .map(({ move }) => move);
+}
+
+function killerKey(move) {
+  return `${move.fromX},${move.fromY}->${move.toX},${move.toY}`;
+}
+
+function createKillerTable() {
+  const table = new Array(MAX_KILLER_PLY);
+  for (let i = 0; i < MAX_KILLER_PLY; i += 1) table[i] = new Array(KILLER_SLOTS).fill(null);
+  return table;
+}
+
+function storeKiller(killers, ply, move) {
+  if (move.capturedPieceId) return;
+  if (ply >= killers.length) return;
+  const key = killerKey(move);
+  const slot = killers[ply];
+  if (slot[0] === key) return;
+  slot[1] = slot[0];
+  slot[0] = key;
 }
 
 function boardKey(board, side, depth) {
   return `${side}:${depth}:${canonicalBoardKey(board)}`;
 }
 
-function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), deadline = Infinity) {
+function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), deadline = Infinity, ply = 0, killers = null) {
   if (performance.now() > deadline) return evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
   if (depth === 0) {
     const moves = allLegalMoves(board, side);
@@ -818,11 +849,13 @@ function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), dea
   }
   let best = -Infinity;
   let didCut = false;
-  for (const move of orderMoves(board, moves, side, aiSide)) {
-    const score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline);
+  const killersAtPly = killers ? killers[Math.min(ply, killers.length - 1)] : null;
+  for (const move of orderMoves(board, moves, side, aiSide, null, killersAtPly)) {
+    const score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers);
     best = Math.max(best, score);
     alpha = Math.max(alpha, score);
     if (alpha >= beta) {
+      if (killers) storeKiller(killers, ply, move);
       didCut = true;
       break;
     }
