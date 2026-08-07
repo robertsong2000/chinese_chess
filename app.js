@@ -60,6 +60,45 @@ const LMR_REDUCTION = 1;
 const NULL_MOVE_MIN_DEPTH = 3;
 const NULL_MOVE_REDUCTION = 2;
 
+// Transposition table / Zobrist hashing
+const TT_FLAG_EXACT = 0; // PV 节点:score 是真实分值
+const TT_FLAG_LOWER = 1; // beta cutoff:score 是下界
+const TT_FLAG_UPPER = 2; // alpha 未升:score 是上界
+const TT_MAX_ENTRIES = 200000; // 容量上限,满则清空(避免内存爆炸)
+const TT_BONUS = 90000; // TT best move 在排序中的 bonus(高于 killer,低于 preferred)
+// 用 splitmix32 + 固定种子生成 Zobrist 数,保证同一部署可复现
+const ZOBRIST_PIECE_KEYS = (() => {
+  let state = 0x9E3779B9 >>> 0;
+  const next = () => {
+    state = (state + 0x9E3779B9) >>> 0;
+    let z = state;
+    z = (z ^ (z >>> 16)) >>> 0;
+    z = Math.imul(z, 0x85EBCA6B) >>> 0;
+    z = (z ^ (z >>> 13)) >>> 0;
+    z = Math.imul(z, 0xC2B2AE35) >>> 0;
+    z = (z ^ (z >>> 16)) >>> 0;
+    return z;
+  };
+  const table = {};
+  for (const side of Object.values(SIDES)) {
+    table[side] = {};
+    for (const type of Object.values(TYPES)) {
+      table[side][type] = new Array(90);
+      for (let i = 0; i < 90; i += 1) table[side][type][i] = next();
+    }
+  }
+  return table;
+})();
+const ZOBRIST_SIDE_KEY = (() => {
+  let z = 0x12345678 >>> 0;
+  z = (z ^ (z >>> 16)) >>> 0;
+  z = Math.imul(z, 0x85EBCA6B) >>> 0;
+  z = (z ^ (z >>> 13)) >>> 0;
+  z = Math.imul(z, 0xC2B2AE35) >>> 0;
+  z = (z ^ (z >>> 16)) >>> 0;
+  return z;
+})();
+
 // 协同评估:车马炮进入攻击区(过河)加分,成对组合额外加分
 const ATTACK_ZONE_BONUS = {
   chariot: 30,
@@ -721,7 +760,7 @@ function chooseAIMove() {
   if (state.aiDifficulty === "easy") return pickEasyMove(moves, state.board, state.currentSide);
   const maxDepth = SEARCH_DEPTH[state.aiDifficulty] || SEARCH_DEPTH.normal;
   const deadline = performance.now() + (state.aiDifficulty === "hard" ? 1100 : 520);
-  const cache = new Map();
+  const tt = createTranspositionTable();
   const killers = createKillerTable();
   const history = createHistoryTable();
   const rootMoves = preferNonRepeatingMoves(state.board, moves, state.currentSide);
@@ -740,7 +779,7 @@ function chooseAIMove() {
         -Infinity,
         Infinity,
         state.currentSide,
-        cache,
+        tt,
         deadline,
         1,
         killers,
@@ -829,9 +868,10 @@ function preferNonRepeatingMoves(board, moves, side) {
   return nonRepeating.length ? nonRepeating : moves;
 }
 
-function moveOrderingScore(board, move, side, aiSide, preferredMove = null, killersAtPly = null, history = null) {
+function moveOrderingScore(board, move, side, aiSide, preferredMove = null, killersAtPly = null, history = null, ttBestMoveKey = null) {
   let score = 0;
   if (preferredMove && move.pieceId === preferredMove.pieceId && move.toX === preferredMove.toX && move.toY === preferredMove.toY) score += 100000;
+  if (ttBestMoveKey && killerKey(move) === ttBestMoveKey) score += TT_BONUS;
   if (move.capturedPieceId) {
     score += 50000 + pieceValueOnBoard(board, move.capturedPieceId) * 12 - pieceValueOnBoard(board, move.pieceId);
   } else {
@@ -855,9 +895,9 @@ function moveOrderingScore(board, move, side, aiSide, preferredMove = null, kill
   return score;
 }
 
-function orderMoves(board, moves, side, aiSide, preferredMove = null, killersAtPly = null, history = null) {
+function orderMoves(board, moves, side, aiSide, preferredMove = null, killersAtPly = null, history = null, ttBestMoveKey = null) {
   return moves
-    .map((move) => ({ move, score: moveOrderingScore(board, move, side, aiSide, preferredMove, killersAtPly, history) }))
+    .map((move) => ({ move, score: moveOrderingScore(board, move, side, aiSide, preferredMove, killersAtPly, history, ttBestMoveKey) }))
     .sort((a, b) => b.score - a.score)
     .map(({ move }) => move);
 }
@@ -914,57 +954,107 @@ function boardKey(board, side, depth) {
   return `${side}:${depth}:${canonicalBoardKey(board)}`;
 }
 
-function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), deadline = Infinity, ply = 0, killers = null, history = null, allowNull = true) {
+// Zobrist hash:90 方格 × 14 (type, side) 组合 + side-to-move XOR
+function computeZobrist(board, side) {
+  let hash = 0;
+  for (const piece of livePieces(board)) {
+    hash ^= ZOBRIST_PIECE_KEYS[piece.side][piece.type][piece.y * 9 + piece.x];
+  }
+  if (side === SIDES.BLACK) hash ^= ZOBRIST_SIDE_KEY;
+  return hash >>> 0;
+}
+
+function createTranspositionTable() {
+  return new Map();
+}
+
+// probe:命中且深度足够 → 直接返回 score 字符串;否则返回 entry 本身(供 bestMove 排序用)
+// 返回值:数字 score 表示可直接用,null 表示无可用条目,object 表示有条元数据但 score 不可用
+function ttProbe(tt, hash, depth, alpha, beta) {
+  const entry = tt.get(hash);
+  if (!entry) return null;
+  if (entry.depth >= depth) {
+    if (entry.flag === TT_FLAG_EXACT) return entry.score;
+    if (entry.flag === TT_FLAG_LOWER && entry.score >= beta) return entry.score;
+    if (entry.flag === TT_FLAG_UPPER && entry.score <= alpha) return entry.score;
+  }
+  return entry;
+}
+
+// store:已有更深条目则保留(避免被浅搜索覆盖),否则替换
+function ttStore(tt, hash, depth, score, flag, bestMoveKey) {
+  const existing = tt.get(hash);
+  if (existing && existing.depth > depth) return;
+  if (tt.size >= TT_MAX_ENTRIES) tt.clear();
+  tt.set(hash, { depth, score, flag, bestMoveKey });
+}
+
+function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = Infinity, ply = 0, killers = null, history = null, allowNull = true) {
   if (performance.now() > deadline) return evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
+  const inCheck = isInCheck(board, side);
+  const hash = tt ? computeZobrist(board, side) : 0;
+  const origAlpha = alpha;
+  let ttBestMoveKey = null;
+  if (tt) {
+    const probed = ttProbe(tt, hash, depth, alpha, beta);
+    if (typeof probed === "number") return probed;
+    if (probed) ttBestMoveKey = probed.bestMoveKey;
+  }
   if (depth === 0) {
     const moves = allLegalMoves(board, side);
     if (moves.length === 0) {
-      return isInCheck(board, side) ? -MATE_SCORE - depth : -8000;
+      return inCheck ? -MATE_SCORE - depth : -8000;
     }
     return quiescence(board, side, alpha, beta, aiSide, QUIESCENCE_DEPTH, deadline, moves);
   }
-  const key = boardKey(board, side, depth);
-  const cached = cache.get(key);
-  if (cached && cached.depth >= depth) return cached.score;
-  if (allowNull && depth >= NULL_MOVE_MIN_DEPTH && !isInCheck(board, side) && beta < Infinity && beta > -Infinity) {
-    const nullScore = -negamax(board, opposite(side), depth - 1 - NULL_MOVE_REDUCTION, -beta, -beta + 1, aiSide, cache, deadline, ply + 1, killers, history, false);
+  if (allowNull && depth >= NULL_MOVE_MIN_DEPTH && !inCheck && beta < Infinity && beta > -Infinity) {
+    const nullScore = -negamax(board, opposite(side), depth - 1 - NULL_MOVE_REDUCTION, -beta, -beta + 1, aiSide, tt, deadline, ply + 1, killers, history, false);
     if (nullScore >= beta) {
+      if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, null);
       return beta;
     }
   }
   const moves = allLegalMoves(board, side);
   if (moves.length === 0) {
-    return isInCheck(board, side) ? -MATE_SCORE - depth : -8000;
+    return inCheck ? -MATE_SCORE - depth : -8000;
   }
   let best = -Infinity;
+  let bestMove = null;
   let didCut = false;
   const killersAtPly = killers ? killers[Math.min(ply, killers.length - 1)] : null;
-  const orderedMoves = orderMoves(board, moves, side, aiSide, null, killersAtPly, history);
+  const orderedMoves = orderMoves(board, moves, side, aiSide, null, killersAtPly, history, ttBestMoveKey);
   const canReduce = depth >= LMR_MIN_DEPTH && orderedMoves.length > LMR_FULL_MOVE_COUNT;
   for (let i = 0; i < orderedMoves.length; i += 1) {
     const move = orderedMoves[i];
     let score;
     const isTactical = Boolean(move.capturedPieceId);
     if (canReduce && i >= LMR_FULL_MOVE_COUNT && !isTactical) {
-      const probeScore = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1 - LMR_REDUCTION, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history, true);
+      const probeScore = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1 - LMR_REDUCTION, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
       if (probeScore > alpha && probeScore < beta) {
-        score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history, true);
+        score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
       } else {
         score = probeScore;
       }
     } else {
-      score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history, true);
+      score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
     }
-    best = Math.max(best, score);
+    if (score > best) {
+      best = score;
+      bestMove = move;
+    }
     alpha = Math.max(alpha, score);
     if (alpha >= beta) {
       if (killers) storeKiller(killers, ply, move);
       if (history && !move.capturedPieceId) storeHistory(history, move, depth);
+      if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, killerKey(move));
       didCut = true;
       break;
     }
   }
-  if (!didCut) cache.set(key, { depth, score: best });
+  if (!didCut && tt) {
+    const flag = best <= origAlpha ? TT_FLAG_UPPER : TT_FLAG_EXACT;
+    ttStore(tt, hash, depth, best, flag, bestMove ? killerKey(bestMove) : null);
+  }
   return best;
 }
 

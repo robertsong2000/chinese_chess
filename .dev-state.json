@@ -235,11 +235,11 @@
         "app.js"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 25,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T00:43:23+08:00",
+      "commit_sha": "pending"
     },
     {
       "id": 24,
@@ -576,6 +576,13 @@
       "action": "completed",
       "summary": "自对弈 benchmark:重写 tests/ai-benchmark.js 做 hard vs normal 4 局对弈(交替先后手),通过 performance.now 包装缩短 deadline,80 ply 上限 + 40 ply 无吃子和棋 + 子力差判胜。结果 hard 4:0(2 局 checkmate + 2 局 material_majority),Phase 1 验证完成,推进到 phase 1.5。",
       "commit_sha": "5693e69"
+    },
+    {
+      "timestamp": "2026-08-08T00:43:23+08:00",
+      "todo_id": 23,
+      "action": "completed",
+      "summary": "Transposition table:Zobrist hashing(splitmix32 固定种子,90 sq × 14 type-side + side key)+ createTranspositionTable/ttProbe/ttStore(EXACT/LOWER/UPPER flag,容量 200k 满则清空);negamax 集成 TT probe + store,替换原 (side,depth,canonicalBoardKey) 字符串 cache;null-move beta cutoff / alpha>=beta cutoff / 完整搜索三种情况分别存 LOWER/LOWER/EXACT|UPPER;orderMoves 接 ttBestMoveKey 给 +9000 bonus;chooseAIMove 改用 tt。8/8 测试通过,hard depth=5 1.12s 内。",
+      "commit_sha": "pending"
     }
   ],
   "rules": [
@@ -587,5 +594,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "下次运行应从 id=23 开始(Hash table / 置换表),phase 1.5 第 1/5"
+  "next_run_hint": "下次运行应从 id=24 开始(Principal Variation Search),phase 1.5 第 2/5"
 }
