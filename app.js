@@ -60,6 +60,18 @@ const LMR_REDUCTION = 1;
 const NULL_MOVE_MIN_DEPTH = 3;
 const NULL_MOVE_REDUCTION = 2;
 
+// === Time management ===
+// 基准思考时间(benchmark 用 timeScale 包装 performance.now,此处维持原值以确保 wall clock 可控)。
+// hard 通过 allocateTimeFactor 动态调整:残局/受困多想,开局/复杂少想,关键局面延伸深度。
+const TIME_BUDGET_MS = { easy: 200, normal: 520, hard: 1100 };
+const TIME_HARD_CAP_MS = 4000;        // 单步绝对上限,防 UI 卡死
+const TIME_ENDGAME_MATERIAL = 8000;   // 己方子力 < 此值视为残局,额外 *1.2
+const TIME_STABLE_WINDOW = 30;        // 评分差 < 此值视为稳定
+const TIME_STABLE_RUN = 2;            // 连续 N 个深度稳定后允许早停
+const TIME_STABLE_MIN_DEPTH = 4;      // 早停要求已搜到的最低深度
+const TIME_EXTEND_IMPROVEMENT = 50;   // 评分改进 > 此值触发深度延伸
+const TIME_MAX_EXTRA_DEPTH = 2;       // 关键局面最多延伸的 ply 数
+
 // Transposition table / Zobrist hashing
 const TT_FLAG_EXACT = 0; // PV 节点:score 是真实分值
 const TT_FLAG_LOWER = 1; // beta cutoff:score 是下界
@@ -750,6 +762,20 @@ function getOpeningBookMove(legalMoves, moveHistory) {
   return null;
 }
 
+function allocateTimeFactor(board, side, moveCount) {
+  // 走法数少 = 残局/受困,精确求解更有价值;走法数多 = 开局/复杂,TT 命中率高、深度本就上不去。
+  let factor;
+  if (moveCount <= 8) factor = 1.6;
+  else if (moveCount <= 15) factor = 1.3;
+  else if (moveCount <= 25) factor = 1.0;
+  else factor = 0.85;
+  const material = livePieces(board)
+    .filter((piece) => piece.side === side)
+    .reduce((sum, piece) => sum + PIECE_VALUE[piece.type], 0);
+  if (material > 0 && material < TIME_ENDGAME_MATERIAL) factor *= 1.2;
+  return factor;
+}
+
 function chooseAIMove() {
   const moves = allLegalMoves(state.board, state.currentSide);
   if (!moves.length) return null;
@@ -758,13 +784,22 @@ function chooseAIMove() {
     if (bookMove) return bookMove;
   }
   if (state.aiDifficulty === "easy") return pickEasyMove(moves, state.board, state.currentSide);
-  const maxDepth = SEARCH_DEPTH[state.aiDifficulty] || SEARCH_DEPTH.normal;
-  const deadline = performance.now() + (state.aiDifficulty === "hard" ? 1100 : 520);
+  const rootMoves = preferNonRepeatingMoves(state.board, moves, state.currentSide);
+  const startTime = performance.now();
+  const baseBudget = TIME_BUDGET_MS[state.aiDifficulty] || TIME_BUDGET_MS.normal;
+  const factor = state.aiDifficulty === "hard"
+    ? allocateTimeFactor(state.board, state.currentSide, rootMoves.length)
+    : 1;
+  let deadline = startTime + Math.min(baseBudget * factor, TIME_HARD_CAP_MS);
+  let maxDepth = SEARCH_DEPTH[state.aiDifficulty] || SEARCH_DEPTH.normal;
   const tt = createTranspositionTable();
   const killers = createKillerTable();
   const history = createHistoryTable();
-  const rootMoves = preferNonRepeatingMoves(state.board, moves, state.currentSide);
   let best = orderMoves(state.board, rootMoves, state.currentSide, state.currentSide)[0];
+
+  const scoreHistory = [];
+  let stableRun = 0;
+  let extended = 0;
 
   for (let depth = 1; depth <= maxDepth; depth += 1) {
     let bestAtDepth = best;
@@ -792,6 +827,34 @@ function chooseAIMove() {
     }
     if (performance.now() > deadline) break;
     best = bestAtDepth;
+
+    // === 时间管理:仅 hard 启用 ===
+    if (state.aiDifficulty === "hard") {
+      const prevScore = scoreHistory.length ? scoreHistory[scoreHistory.length - 1] : undefined;
+      scoreHistory.push(bestScore);
+      if (prevScore !== undefined) {
+        if (Math.abs(prevScore - bestScore) < TIME_STABLE_WINDOW) {
+          stableRun += 1;
+          // 连续 N 个深度评分稳定 + 已达合理深度 → 提前停(节省时间给后续回合)
+          if (stableRun >= TIME_STABLE_RUN
+            && depth >= TIME_STABLE_MIN_DEPTH
+            && depth >= maxDepth - 1) {
+            break;
+          }
+        } else {
+          stableRun = 0;
+          // 关键局面:最后深度评分剧烈改进 + 时间还够 → 延伸 1 ply
+          if (depth === maxDepth
+            && Math.abs(prevScore - bestScore) > TIME_EXTEND_IMPROVEMENT
+            && extended < TIME_MAX_EXTRA_DEPTH
+            && performance.now() - startTime < baseBudget * 0.6) {
+            maxDepth += 1;
+            extended += 1;
+            deadline = Math.min(deadline + baseBudget * 0.5, startTime + TIME_HARD_CAP_MS);
+          }
+        }
+      }
+    }
   }
   return best || moves[0];
 }
