@@ -51,6 +51,9 @@ const KILLER_BONUS_MAIN = 8000;
 const KILLER_BONUS_SECOND = 7000;
 const MAX_KILLER_PLY = 32;
 const KILLER_SLOTS = 2;
+const HISTORY_MAX_BONUS = 6000;
+const HISTORY_BOARD_SQUARES = 90;
+const HISTORY_SATURATION_CAP = HISTORY_MAX_BONUS * 4;
 
 const MOBILITY_VALUE = {
   general: 0,
@@ -679,6 +682,7 @@ function chooseAIMove() {
   const deadline = performance.now() + (state.aiDifficulty === "hard" ? 1100 : 520);
   const cache = new Map();
   const killers = createKillerTable();
+  const history = createHistoryTable();
   const rootMoves = preferNonRepeatingMoves(state.board, moves, state.currentSide);
   let best = orderMoves(state.board, rootMoves, state.currentSide, state.currentSide)[0];
 
@@ -699,6 +703,7 @@ function chooseAIMove() {
         deadline,
         1,
         killers,
+        history,
       ) - rootCyclePenalty(state.board, move, state.currentSide);
       if (score > bestScore) {
         bestScore = score;
@@ -783,15 +788,24 @@ function preferNonRepeatingMoves(board, moves, side) {
   return nonRepeating.length ? nonRepeating : moves;
 }
 
-function moveOrderingScore(board, move, side, aiSide, preferredMove = null, killersAtPly = null) {
+function moveOrderingScore(board, move, side, aiSide, preferredMove = null, killersAtPly = null, history = null) {
   let score = 0;
   if (preferredMove && move.pieceId === preferredMove.pieceId && move.toX === preferredMove.toX && move.toY === preferredMove.toY) score += 100000;
   if (move.capturedPieceId) {
     score += 50000 + pieceValueOnBoard(board, move.capturedPieceId) * 12 - pieceValueOnBoard(board, move.pieceId);
-  } else if (killersAtPly) {
-    const key = killerKey(move);
-    if (killersAtPly[0] === key) score += KILLER_BONUS_MAIN;
-    else if (killersAtPly[1] === key) score += KILLER_BONUS_SECOND;
+  } else {
+    let matchedKiller = false;
+    if (killersAtPly) {
+      const key = killerKey(move);
+      if (killersAtPly[0] === key) {
+        score += KILLER_BONUS_MAIN;
+        matchedKiller = true;
+      } else if (killersAtPly[1] === key) {
+        score += KILLER_BONUS_SECOND;
+        matchedKiller = true;
+      }
+    }
+    if (!matchedKiller && history) score += historyOrderingBonus(history, move);
   }
   const next = applyMoveToBoard(board, move);
   if (isInCheck(next, opposite(side))) score += 9000;
@@ -800,9 +814,9 @@ function moveOrderingScore(board, move, side, aiSide, preferredMove = null, kill
   return score;
 }
 
-function orderMoves(board, moves, side, aiSide, preferredMove = null, killersAtPly = null) {
+function orderMoves(board, moves, side, aiSide, preferredMove = null, killersAtPly = null, history = null) {
   return moves
-    .map((move) => ({ move, score: moveOrderingScore(board, move, side, aiSide, preferredMove, killersAtPly) }))
+    .map((move) => ({ move, score: moveOrderingScore(board, move, side, aiSide, preferredMove, killersAtPly, history) }))
     .sort((a, b) => b.score - a.score)
     .map(({ move }) => move);
 }
@@ -827,11 +841,39 @@ function storeKiller(killers, ply, move) {
   slot[0] = key;
 }
 
+function squareIndex(x, y) {
+  return y * 9 + x;
+}
+
+function createHistoryTable() {
+  return new Array(HISTORY_BOARD_SQUARES * HISTORY_BOARD_SQUARES).fill(0);
+}
+
+function historyOrderingBonus(history, move) {
+  if (!history) return 0;
+  const from = squareIndex(move.fromX, move.fromY);
+  const to = squareIndex(move.toX, move.toY);
+  const value = history[from * HISTORY_BOARD_SQUARES + to];
+  if (value <= 0) return 0;
+  return value >= HISTORY_MAX_BONUS ? HISTORY_MAX_BONUS : value;
+}
+
+function storeHistory(history, move, depth) {
+  if (!history) return;
+  const from = squareIndex(move.fromX, move.fromY);
+  const to = squareIndex(move.toX, move.toY);
+  const bonus = depth > 0 ? depth * depth : 1;
+  const idx = from * HISTORY_BOARD_SQUARES + to;
+  let next = history[idx] + bonus;
+  if (next > HISTORY_SATURATION_CAP) next = HISTORY_SATURATION_CAP;
+  history[idx] = next;
+}
+
 function boardKey(board, side, depth) {
   return `${side}:${depth}:${canonicalBoardKey(board)}`;
 }
 
-function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), deadline = Infinity, ply = 0, killers = null) {
+function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), deadline = Infinity, ply = 0, killers = null, history = null) {
   if (performance.now() > deadline) return evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
   if (depth === 0) {
     const moves = allLegalMoves(board, side);
@@ -850,12 +892,13 @@ function negamax(board, side, depth, alpha, beta, aiSide, cache = new Map(), dea
   let best = -Infinity;
   let didCut = false;
   const killersAtPly = killers ? killers[Math.min(ply, killers.length - 1)] : null;
-  for (const move of orderMoves(board, moves, side, aiSide, null, killersAtPly)) {
-    const score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers);
+  for (const move of orderMoves(board, moves, side, aiSide, null, killersAtPly, history)) {
+    const score = -negamax(applyMoveToBoard(board, move), opposite(side), depth - 1, -beta, -alpha, aiSide, cache, deadline, ply + 1, killers, history);
     best = Math.max(best, score);
     alpha = Math.max(alpha, score);
     if (alpha >= beta) {
       if (killers) storeKiller(killers, ply, move);
+      if (history && !move.capturedPieceId) storeHistory(history, move, depth);
       didCut = true;
       break;
     }

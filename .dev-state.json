@@ -1,0 +1,535 @@
+{
+  "project": "chinese_chess",
+  "repo": "https://github.com/robertsong2000/chinese_chess",
+  "repo_path": "/home/robertsong/workspace/claude-2/chinese-chess-work",
+  "goal": "提升 AI 棋力到二级棋士 - 一级棋士水平(Elo ~1800-2200)",
+  "goal_definition": {
+    "elo_equivalent": "1800-2200",
+    "chess_strength": "二级棋士 - 一级棋士(业余顶级 - 准专业)",
+    "behavioral_targets": [
+      "完全不送子(送子检测 + 严格防守)",
+      "开局熟练(开局库 + 主要变着)",
+      "能看 5-7 步(深度 + 选择性延伸 + hash table)",
+      "残局能赢必胜局面(残局评估 + 简单 tablebase)",
+      "中局有战术组合能力(牵制、双击、闪击、抽将)",
+      "知道时间管理(关键局面思考更深)",
+      "不会输给新手陷阱(常见陷阱防御)"
+    ],
+    "rating_progression_reference": [
+      "三级棋士 ~1600-1800(Phase 1 完成后预期)",
+      "二级棋士 ~1800-2000(Phase 1 + Phase 1.5 部分)",
+      "一级棋士 ~2000-2200(Phase 1 + Phase 1.5 全部)"
+    ]
+  },
+  "current_baseline": {
+    "search_depth": {
+      "easy": 1,
+      "normal": 2,
+      "hard": 4
+    },
+    "quiescence_depth": 3,
+    "tests_pass": 8,
+    "current_strength_estimate": "normal=新手,hard=接近三级棋士"
+  },
+  "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
+  "current_phase": 1,
+  "phases": [
+    {
+      "id": 1,
+      "name": "棋力提升(基础)",
+      "todo_count": 10,
+      "priority": "P0",
+      "rationale": "三级棋士基础,直接服务目标"
+    },
+    {
+      "id": 1.5,
+      "name": "棋力冲刺(二级→一级)",
+      "todo_count": 5,
+      "priority": "P0",
+      "rationale": "把棋力从三级推到二级/一级棋士"
+    },
+    {
+      "id": 2,
+      "name": "工程外围 P0",
+      "todo_count": 5,
+      "priority": "P0",
+      "rationale": "公开仓库最低要求"
+    },
+    {
+      "id": 3,
+      "name": "工程外围 P1",
+      "todo_count": 7,
+      "priority": "P1",
+      "rationale": "质量门槛"
+    }
+  ],
+  "todos": [
+    {
+      "id": 1,
+      "phase": 1,
+      "category": "棋力-开局",
+      "title": "开局库(常见开局 5-10 步)",
+      "description": "在 app.js 加 OPENING_BOOK 字典,收录 5-10 个最常见开局(中炮、屏风马、反宫马、单提马、列炮)。开局阶段 AI 优先用库,库耗尽后切换到 alpha-beta。验收:开局前 5 步不再随机。预估 20 分钟。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 20,
+      "attempts": 1,
+      "completed_at": "2026-08-07T20:06:10+08:00",
+      "commit_sha": "00ffdce"
+    },
+    {
+      "id": 2,
+      "phase": 1,
+      "category": "棋力-搜索",
+      "title": "Killer heuristic(走法排序)",
+      "description": "实现 killer move table:在某一层导致 beta cutoff 的走法,在相同深度优先尝试。这是 alpha-beta 加速的经典优化。验收:npm test 通过 + hard 模式搜索深度能从 4 提到 5。预估 20 分钟。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 20,
+      "attempts": 1,
+      "completed_at": "2026-08-07T20:14:52+08:00",
+      "commit_sha": "bb78125"
+    },
+    {
+      "id": 3,
+      "phase": 1,
+      "category": "棋力-搜索",
+      "title": "History heuristic(走法排序)",
+      "description": "实现 history table:记录 (from,to) 走法在 cutoff 中的累计次数,排序时优先。与 killer互补(killer 是同层,history 是全局)。验收:npm test 通过。预估 20 分钟。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 20,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 4,
+      "phase": 1,
+      "category": "棋力-搜索",
+      "title": "Late move reduction(LMR)",
+      "description": "对走法排序后,排在后面的走法(第 N 个之后)在深搜索中减少深度 (-1 ply)。验收:npm test 通过 + hard 模式深度能再 +1。预估 25 分钟。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 5,
+      "phase": 1,
+      "category": "棋力-搜索",
+      "title": "Null move pruning",
+      "description": "在搜索中尝试'让一步'(null move),如果对手即使多走一步也无法赢,说明当前局面已占优,可以 prune。验收:npm test 通过 + hard 模式深度提升。预估 25 分钟。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 6,
+      "phase": 1,
+      "category": "棋力-评估",
+      "title": "评估函数:兵过河加分",
+      "description": "在 POSITION_BONUS.soldier 之上,额外加:已过河兵额外 +30 分(过河兵威胁更大)。验收:npm test 通过。预估 15 分钟。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 15,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 7,
+      "phase": 1,
+      "category": "棋力-评估",
+      "title": "评估函数:车马炮协同",
+      "description": "在评估中加'子力协同'项:车马炮在攻击区(对方半场)有额外加分,成对组合(双车、双炮、车马)加分。验收:npm test 通过。预估 25 分钟。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 8,
+      "phase": 1,
+      "category": "棋力-评估",
+      "title": "评估函数:王的安全(飞行将军防守)",
+      "description": "评估对方车/炮对己方将的威胁:车在同一列、炮有架瞄准将,扣分。这是新手最常失误的地方。验收:npm test 通过。预估 30 分钟(可拆)。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 9,
+      "phase": 1,
+      "category": "棋力-残局",
+      "title": "残局阶段切换评估",
+      "description": "在棋盘上子力 < 某阈值(如每方 < 30 分)时,切换到'残局评估':鼓励兵升变(过河兵越靠近底线加分越多)、鼓励主动进攻。验收:npm test 通过。预估 25 分钟。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 10,
+      "phase": 1,
+      "category": "棋力-验证",
+      "title": "Benchmark:验证棋力提升",
+      "description": "扩展 tests/ai-benchmark.js,加入'AI 自对弈 10 局'(用相同强度对打,胜率高者说明评估函数更好)。运行后记录胜率到 docs/plans/benchmark-results.md。预估 30 分钟。",
+      "files": [
+        "tests/ai-benchmark.js",
+        "docs/plans/benchmark-results.md"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 23,
+      "phase": 1.5,
+      "category": "棋力-二级冲刺",
+      "title": "Hash table / 置换表",
+      "description": "实现 transposition table:用 Zobrist hashing 对每个局面生成 hash,缓存 (depth, score, best_move)。同一局面重复出现时直接查表。验收:npm test 通过 + 搜索速度提升 30%+。预估 25 分钟。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 24,
+      "phase": 1.5,
+      "category": "棋力-二级冲刺",
+      "title": "Principal Variation Search(PVS)",
+      "description": "用 PVS 替换基础 alpha-beta:第一个走法用全窗口,后续用零窗口试探。对走法排序好时,效率显著高于 alpha-beta。验收:npm test 通过 + 速度提升。预估 25 分钟。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 25,
+      "phase": 1.5,
+      "category": "棋力-二级冲刺",
+      "title": "Web Workers 重构 AI 思考",
+      "description": "把 AI 搜索逻辑移到 Web Worker。主线程不卡,可把 hard 模式搜索深度从 4 提到 6-7。改动:新建 ai-worker.js + app.js 改成异步等待 worker 返回。验收:npm test 通过(注意:测试可能需要 mock worker 环境)。预估 30 分钟。",
+      "files": [
+        "app.js",
+        "ai-worker.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 26,
+      "phase": 1.5,
+      "category": "棋力-二级冲刺",
+      "title": "时间管理(动态分配思考时间)",
+      "description": "根据剩余棋子数、回合数、局面复杂度,动态分配思考时间。关键局面多想,简单局面少想。验收:npm test 通过 + benchmark 显示关键局面深度 +1-2。预估 25 分钟。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 27,
+      "phase": 1.5,
+      "category": "棋力-一级冲刺",
+      "title": "扩展开局库到 20+ 变化 + 主要变着",
+      "description": "把开局库从 5-10 扩展到 20+ 主要开局变着。包括中炮七路马、中炮横车、仙人指路、飞相局、起马局、反宫马、屏风马等主流布局。每个开局至少 8 步深度。验收:npm test 通过。预估 30 分钟(可拆)。",
+      "files": [
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 11,
+      "phase": 2,
+      "category": "工程-P0",
+      "title": "写 README.md",
+      "description": "项目简介 + 特性 + 截图占位 + 快速启动(docker-compose up)+ 技术栈 + 项目结构 + 开发指南。基于 中国象棋游戏PRD.md 提炼。预估 30 分钟。",
+      "files": [
+        "README.md"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 12,
+      "phase": 2,
+      "category": "工程-P0",
+      "title": "加 LICENSE(MIT)",
+      "description": "创建 LICENSE 文件,MIT 协议,版权署 song.luo。一行 curl 或手动写。预估 5 分钟。",
+      "files": [
+        "LICENSE"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 5,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 13,
+      "phase": 2,
+      "category": "工程-P0",
+      "title": "加 .gitignore",
+      "description": "标准 Node + macOS + Linux 模板:node_modules/、.DS_Store、*.log、.vscode/、.idea/、.env、dist/。预估 5 分钟。",
+      "files": [
+        ".gitignore"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 5,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 14,
+      "phase": 2,
+      "category": "工程-P0",
+      "title": "加 GitHub Actions CI",
+      "description": "创建 .github/workflows/test.yml,每次 push/PR 跑 npm test。Node 22 + cache。预估 15 分钟。",
+      "files": [
+        ".github/workflows/test.yml"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 15,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 15,
+      "phase": 2,
+      "category": "工程-P0",
+      "title": "加 CHANGELOG.md",
+      "description": "按 Keep a Changelog 格式初始化。从 git log 倒推 v0.0.1(initial)/v0.1.0(AI 改进)/v0.2.0(部署 + AI 搜索优化)。预估 15 分钟。",
+      "files": [
+        "CHANGELOG.md"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 15,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 16,
+      "phase": 3,
+      "category": "工程-P1",
+      "title": "加 ESLint + Prettier 配置",
+      "description": ".eslintrc.json(recommended)+ .prettierrc(单引号 / 100 字符 / 无分号)。在 package.json 加 lint script。预估 15 分钟。",
+      "files": [
+        ".eslintrc.json",
+        ".prettierrc",
+        "package.json"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 15,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 17,
+      "phase": 3,
+      "category": "工程-P1",
+      "title": "拆分 app.js(第 1 步:常量)",
+      "description": "把 TYPES、LABELS、PIECE_VALUE、POSITION_BONUS 等常量移到 src/constants.js。app.js import 它。仍保持 ES5 风格(无 build)。预估 25 分钟。",
+      "files": [
+        "src/constants.js",
+        "app.js"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 18,
+      "phase": 3,
+      "category": "工程-P1",
+      "title": "拆分 app.js(第 2 步:棋规)",
+      "description": "把棋规函数(generateMoves、isLegal、applyMove 等)移到 src/rules.js。预估 25 分钟。",
+      "files": [
+        "src/rules.js",
+        "app.js"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 19,
+      "phase": 3,
+      "category": "工程-P1",
+      "title": "拆分 app.js(第 3 步:搜索)",
+      "description": "把 AI 搜索函数(search、quiescence、evaluate)移到 src/search.js。预估 25 分钟。",
+      "files": [
+        "src/search.js",
+        "app.js"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 20,
+      "phase": 3,
+      "category": "工程-P1",
+      "title": "加 Issue 模板",
+      "description": ".github/ISSUE_TEMPLATE/bug.md + feature.md + .github/PULL_REQUEST_TEMPLATE.md。预估 15 分钟。",
+      "files": [
+        ".github/ISSUE_TEMPLATE/bug.md",
+        ".github/ISSUE_TEMPLATE/feature.md",
+        ".github/PULL_REQUEST_TEMPLATE.md"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 15,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 21,
+      "phase": 3,
+      "category": "工程-P1",
+      "title": "docker-compose 加 healthcheck",
+      "description": "docker-compose.yml 加 healthcheck(curl localhost:80 / wget --spider),加 restart policy 优化。预估 10 分钟。",
+      "files": [
+        "docker-compose.yml"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 10,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 22,
+      "phase": 3,
+      "category": "工程-P1",
+      "title": "更新 PRD 反映现状",
+      "description": "中国象棋游戏PRD.md 加一节'当前实现状态'(已完成特性、棋力估算、TODO 链接)。预估 20 分钟。",
+      "files": [
+        "中国象棋游戏PRD.md"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 20,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    }
+  ],
+  "history": [
+    {
+      "timestamp": "2026-08-07T20:06:10+08:00",
+      "todo_id": 1,
+      "action": "completed",
+      "summary": "加开局库:OPENING_BOOK_LINES 5 个开局(中炮-屏风马 / 中炮-还中炮 / 仙人指路 / 起马 / 飞相)+ getOpeningBookMove() 函数 + chooseAIMove 集成。78 行新增。",
+      "commit_sha": "00ffdce"
+    },
+    {
+      "timestamp": "2026-08-07T20:14:52+08:00",
+      "todo_id": 2,
+      "action": "completed",
+      "summary": "加 killer heuristic:createKillerTable/storeKiller/killerKey,negamax 接收 ply+killers,cutoff 时记录 quiet 走法,orderMoves 在同层给 +8000/+7000 bonus。8/8 测试通过。",
+      "commit_sha": "bb78125"
+    }
+  ],
+  "rules": [
+    "每次只做一个 TODO",
+    "测试不通过就不 commit",
+    "20 分钟做不完的,标记 in_progress,下次继续",
+    "失败的尝试 attempts +1,3 次失败标 blocked",
+    "commit message 引用 TODO 编号(如 '[TODO #1] 加开局库')",
+    "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
+    "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
+  ],
+  "next_run_hint": "下次运行应从 id=1 开始(开局库),phase 1 优先"
+}
