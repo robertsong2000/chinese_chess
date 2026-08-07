@@ -84,6 +84,18 @@ const KING_SAFETY = {
   cannonPressure: 12, // 敌方炮在我王同行/列且距离 2-4
 };
 
+// 残局阶段:每方非将子力总值 <= 此阈值时切换到残局评估
+// ~1 车 + 1 马 + 1 兵 = 1400,~1 车 + 1 炮 = 1350,~2 马 + 2 兵 = 1000
+const ENDGAME_MATERIAL_THRESHOLD = 1800;
+// 残局阶段:过河兵越靠近对方底线加分越多(每深入 1 行)
+const ENDGAME_SOLDIER_ADVANCE_BONUS = 8;
+// 残局阶段:车马炮过河额外奖励倍数(在 ATTACK_ZONE_BONUS 之上)
+const ENDGAME_ATTACKER_ZONE_MULTIPLIER = 1.5;
+// 残局阶段:士象价值缩水(守子难以扭转局势)
+const ENDGAME_DEFENDER_PENALTY = 30;
+// 残局阶段:将军/抽将额外加分(鼓励主动进攻)
+const ENDGAME_CHECK_BONUS = 80;
+
 const MOBILITY_VALUE = {
   general: 0,
   advisor: 1,
@@ -985,6 +997,7 @@ function quiescence(board, side, alpha, beta, aiSide, depth, deadline, legalMove
 function evaluateBoard(board, aiSide) {
   let score = 0;
   const controlMaps = buildControlMaps(board);
+  const endgame = isEndgame(board);
   // 按方统计车马炮存活数,用于成对组合加分
   const attackerCount = {
     [SIDES.RED]: { chariot: 0, cannon: 0, horse: 0 },
@@ -1006,7 +1019,15 @@ function evaluateBoard(board, aiSide) {
     // 攻击区(过河)车马炮加分
     const zoneBonus = ATTACK_ZONE_BONUS[piece.type];
     if (zoneBonus && crossedRiver(piece.side, piece.y)) {
-      value += zoneBonus;
+      value += endgame ? zoneBonus * ENDGAME_ATTACKER_ZONE_MULTIPLIER : zoneBonus;
+    }
+    // 残局:过河兵按推进深度加分(越靠近对方底线越值钱)
+    if (endgame && piece.type === TYPES.SOLDIER) {
+      value += endgameSoldierBonus(piece);
+    }
+    // 残局:士象价值缩水
+    if (endgame && (piece.type === TYPES.ADVISOR || piece.type === TYPES.ELEPHANT)) {
+      value -= ENDGAME_DEFENDER_PENALTY;
     }
     // 成对组合加分:同方同类型存活数达到阈值时,该类棋子每个加 PAIR_BONUS
     const pairBonusTable = PAIR_BONUS[piece.type];
@@ -1018,12 +1039,32 @@ function evaluateBoard(board, aiSide) {
     }
     score += direction * value;
   }
-  if (isInCheck(board, opposite(aiSide))) score += 120;
-  if (isInCheck(board, aiSide)) score -= 160;
+  if (isInCheck(board, opposite(aiSide))) score += endgame ? 120 + ENDGAME_CHECK_BONUS : 120;
+  if (isInCheck(board, aiSide)) score -= endgame ? 160 + ENDGAME_CHECK_BONUS : 160;
   // 王的安全(士象守卫 + 出宫惩罚 + 敌方近距离车炮威胁)
   score += kingSafetyScore(board, aiSide);
   score -= kingSafetyScore(board, opposite(aiSide));
   return score;
+}
+
+// 残局阶段判定:每方非将子力 <= ENDGAME_MATERIAL_THRESHOLD 时为残局
+function isEndgame(board) {
+  let red = 0;
+  let black = 0;
+  for (const piece of livePieces(board)) {
+    if (piece.type === TYPES.GENERAL) continue;
+    if (piece.side === SIDES.RED) red += PIECE_VALUE[piece.type];
+    else black += PIECE_VALUE[piece.type];
+  }
+  return red <= ENDGAME_MATERIAL_THRESHOLD && black <= ENDGAME_MATERIAL_THRESHOLD;
+}
+
+// 残局兵推进加分:过河兵越靠近对方底线越值钱
+// 红方过河 y∈[0,4],推进深度 = 4 - y(0..4);黑方过河 y∈[5,9],推进深度 = y - 5(0..4)
+function endgameSoldierBonus(piece) {
+  if (!crossedRiver(piece.side, piece.y)) return 0;
+  const progress = piece.side === SIDES.RED ? 4 - piece.y : piece.y - 5;
+  return progress * ENDGAME_SOLDIER_ADVANCE_BONUS;
 }
 
 // 王的安全评估:负数表示该方王处于风险,正数表示防守稳固。
