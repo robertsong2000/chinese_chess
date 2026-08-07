@@ -993,6 +993,23 @@ function chooseAIMove() {
   return runAISearch(state);
 }
 
+// Worker 工厂:在浏览器环境返回 Worker 实例,node/无 Worker 环境返回 null。
+// 当前 AI_WORKER_ENABLED = false,scheduleAI 仍走同步 chooseAIMove 路径。
+// 子任务 C 会把它打通:浏览器打开此开关 → 异步等待 worker 返回走法 → executeMove。
+let AI_WORKER_ENABLED = false;
+const AI_WORKER_URL = "ai-worker.js";
+
+function createAIWorker() {
+  if (!AI_WORKER_ENABLED) return null;
+  if (typeof Worker === "undefined") return null;
+  try {
+    return new Worker(AI_WORKER_URL);
+  } catch (err) {
+    console.warn("createAIWorker failed, fallback to sync:", err);
+    return null;
+  }
+}
+
 // 纯函数版 AI 搜索:接受 state 引用,返回选定的走法。
 // 抽出的目的:为 Web Worker 化做准备(worker 无法访问全局 state,需显式传入)。
 // 注意:内部辅助函数(capturedValue/positionRepetitionCount/rootCyclePenalty)目前
