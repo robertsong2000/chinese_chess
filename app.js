@@ -688,41 +688,252 @@ function finishGame(winner, reason) {
   beep("finish");
 }
 
-const OPENING_BOOK_MAX_PLIES = 10;
+const OPENING_BOOK_MAX_PLIES = 12;
 
+// 22 个主流开局变着,每个 8 步(4 回合)。覆盖中炮、屏风马、反宫马、
+// 仙人指路、飞相局、起马局、过宫炮、仕角炮、列炮等主流布局类型。
 const OPENING_BOOK_LINES = [
+  // 1. 中炮七路马对屏风马(红横车)
   [
     { fromX: 7, fromY: 7, toX: 4, toY: 7 },
     { fromX: 1, fromY: 0, toX: 2, toY: 2 },
     { fromX: 7, fromY: 9, toX: 6, toY: 7 },
     { fromX: 7, fromY: 0, toX: 6, toY: 2 },
     { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+    { fromX: 0, fromY: 9, toX: 0, toY: 8 },
+    { fromX: 8, fromY: 0, toX: 7, toY: 0 },
   ],
+  // 2. 中炮直车对屏风马(过河车)
+  [
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 8, fromY: 9, toX: 7, toY: 9 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+    { fromX: 7, fromY: 9, toX: 7, toY: 3 },
+    { fromX: 2, fromY: 3, toX: 2, toY: 4 },
+  ],
+  // 3. 中炮横车对屏风马(车九进一)
+  [
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 0, fromY: 9, toX: 0, toY: 8 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+    { fromX: 0, fromY: 8, toX: 4, toY: 8 },
+    { fromX: 8, fromY: 0, toX: 7, toY: 0 },
+  ],
+  // 4. 中炮对反宫马(黑左炮平 6)
+  [
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 2, toX: 3, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 8, fromY: 9, toX: 7, toY: 9 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+  ],
+  // 5. 中炮对顺炮(双方同型,黑方左炮打中)
+  [
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 2, toX: 4, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 8, fromY: 9, toX: 7, toY: 9 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+    { fromX: 7, fromY: 9, toX: 7, toY: 5 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+  ],
+  // 6. 中炮对顺炮直车(黑方右炮打中)
   [
     { fromX: 7, fromY: 7, toX: 4, toY: 7 },
     { fromX: 7, fromY: 2, toX: 4, toY: 2 },
     { fromX: 7, fromY: 9, toX: 6, toY: 7 },
     { fromX: 1, fromY: 0, toX: 2, toY: 2 },
     { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 8, fromY: 9, toX: 7, toY: 9 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
   ],
+  // 7. 中炮对列炮(黑右炮反方向打中)
   [
-    { fromX: 3, fromY: 6, toX: 3, toY: 5 },
-    { fromX: 5, fromY: 3, toX: 5, toY: 4 },
     { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 7, fromY: 2, toX: 4, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 8, fromY: 9, toX: 7, toY: 9 },
+    { fromX: 8, fromY: 0, toX: 7, toY: 0 },
+    { fromX: 7, fromY: 9, toX: 7, toY: 3 },
     { fromX: 1, fromY: 0, toX: 2, toY: 2 },
   ],
+  // 8. 五七炮对屏风马(红方右炮平 5,左炮平 9)
   [
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
     { fromX: 7, fromY: 9, toX: 6, toY: 7 },
     { fromX: 7, fromY: 0, toX: 6, toY: 2 },
     { fromX: 1, fromY: 9, toX: 2, toY: 7 },
-    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
-    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+    { fromX: 1, fromY: 7, toX: 0, toY: 7 },
+    { fromX: 8, fromY: 0, toX: 7, toY: 0 },
   ],
+  // 9. 五六炮对屏风马(红右炮平六)
   [
-    { fromX: 6, fromY: 9, toX: 4, toY: 7 },
+    { fromX: 7, fromY: 7, toX: 3, toY: 7 },
     { fromX: 1, fromY: 0, toX: 2, toY: 2 },
     { fromX: 7, fromY: 9, toX: 6, toY: 7 },
     { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+    { fromX: 0, fromY: 9, toX: 0, toY: 8 },
+    { fromX: 8, fromY: 0, toX: 7, toY: 0 },
+  ],
+  // 10. 仙人指路对卒底炮(红进三兵,黑平卒底炮)
+  [
+    { fromX: 6, fromY: 6, toX: 6, toY: 5 },
+    { fromX: 7, fromY: 2, toX: 4, toY: 2 },
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 8, fromY: 9, toX: 7, toY: 9 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+  ],
+  // 11. 仙人指路对起马
+  [
+    { fromX: 6, fromY: 6, toX: 6, toY: 5 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 8, fromY: 0, toX: 7, toY: 0 },
+  ],
+  // 12. 仙人指路对中炮(黑方起手炮二平五)
+  [
+    { fromX: 6, fromY: 6, toX: 6, toY: 5 },
+    { fromX: 7, fromY: 2, toX: 4, toY: 2 },
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+  ],
+  // 13. 仙人指路转右中炮
+  [
+    { fromX: 2, fromY: 6, toX: 2, toY: 5 },
+    { fromX: 6, fromY: 3, toX: 6, toY: 4 },
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+  ],
+  // 14. 飞相局对左中炮(相三进五)
+  [
+    { fromX: 6, fromY: 9, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 2, toX: 4, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 8, fromY: 9, toX: 7, toY: 9 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+  ],
+  // 15. 飞相局对进卒(相三进五)
+  [
+    { fromX: 6, fromY: 9, toX: 4, toY: 7 },
+    { fromX: 6, fromY: 3, toX: 6, toY: 4 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 8, fromY: 9, toX: 7, toY: 9 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+  ],
+  // 16. 飞相局对起马(相七进五)
+  [
+    { fromX: 2, fromY: 9, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+    { fromX: 8, fromY: 9, toX: 7, toY: 9 },
+    { fromX: 8, fromY: 0, toX: 7, toY: 0 },
+  ],
+  // 17. 起马局对挺卒
+  [
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 6, fromY: 3, toX: 6, toY: 4 },
+    { fromX: 1, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 0, fromY: 9, toX: 1, toY: 9 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+  ],
+  // 18. 起马局对进炮
+  [
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 2, toX: 5, toY: 2 },
+    { fromX: 1, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 0, fromY: 9, toX: 1, toY: 9 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+  ],
+  // 19. 过宫炮对起马(炮二平六)
+  [
+    { fromX: 7, fromY: 7, toX: 3, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+    { fromX: 8, fromY: 9, toX: 7, toY: 9 },
+    { fromX: 8, fromY: 0, toX: 7, toY: 0 },
+  ],
+  // 20. 过宫炮对进卒
+  [
+    { fromX: 7, fromY: 7, toX: 3, toY: 7 },
+    { fromX: 6, fromY: 3, toX: 6, toY: 4 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 8, fromY: 9, toX: 7, toY: 9 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+  ],
+  // 21. 仕角炮对起马(炮二平四)
+  [
+    { fromX: 7, fromY: 7, toX: 5, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 0, fromY: 0, toX: 1, toY: 0 },
+    { fromX: 0, fromY: 9, toX: 0, toY: 8 },
+    { fromX: 8, fromY: 0, toX: 7, toY: 0 },
+  ],
+  // 22. 中炮七路马横车对屏风马进 7 卒
+  [
+    { fromX: 7, fromY: 7, toX: 4, toY: 7 },
+    { fromX: 6, fromY: 3, toX: 6, toY: 4 },
+    { fromX: 7, fromY: 9, toX: 6, toY: 7 },
+    { fromX: 1, fromY: 0, toX: 2, toY: 2 },
+    { fromX: 1, fromY: 9, toX: 2, toY: 7 },
+    { fromX: 7, fromY: 0, toX: 6, toY: 2 },
+    { fromX: 8, fromY: 9, toX: 8, toY: 8 },
+    { fromX: 0, fromY: 0, toX: 0, toY: 1 },
   ],
 ];
 
