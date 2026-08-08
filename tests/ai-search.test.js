@@ -1762,3 +1762,69 @@ test("#53 quiescence check extension: non-capture check move is searched when de
     `depth=1: quiescence should NOT extend quiet check move (< MIN_DEPTH=2), got ${result.recursedDepth1} recursions`);
 });
 
+test("#54 cross-turn TT reuse: chooseAIMove populates a shared TT that persists across moves in the same game", () => {
+  // 契约:runAISearch 内部改为 getSharedTT()(模块级单例),跨回合共享 TT 条目。
+  // 直接服务"看 5-7 步":TT 命中让 iterative deepening 起点更高,同等时间多搜 ~1 ply。
+  // 生命周期:createGame → resetSharedTT() 清表(防跨局污染);局内多次 chooseAIMove 复用同一 TT。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    state = createGame(SIDES.RED, "normal");
+    state.status = "playing";
+    state.currentSide = SIDES.RED;
+    // 跳过开局:getOpeningBookMove 在 moveHistory.length >= OPENING_BOOK_MAX_PLIES(12) 时返回 null,
+    // 强制 runAISearch 走 negamax,从而 populate TT。
+    state.moveHistory = new Array(OPENING_BOOK_MAX_PLIES).fill({});
+
+    // createGame 后 TT 必须被 reset
+    const statsAfterCreate = sharedTTStats();
+
+    // 第一次 AI 搜索 → 应该 populate TT
+    const move1 = chooseAIMove();
+    const statsAfterFirst = sharedTTStats();
+
+    // 同一局内再次调用 → 复用同一 TT(gen 不变)
+    const move2 = chooseAIMove();
+    const statsAfterSecond = sharedTTStats();
+
+    // 新局:createGame 应再次 reset,gen 递增
+    const genBeforeNewGame = statsAfterSecond.gen;
+    state = createGame(SIDES.BLACK, "hard");
+    const statsAfterNewGame = sharedTTStats();
+
+    return {
+      sizeAfterCreate: statsAfterCreate.size,
+      sizeAfterFirst: statsAfterFirst.size,
+      sizeAfterSecond: statsAfterSecond.size,
+      firstGen: statsAfterFirst.gen,
+      secondGen: statsAfterSecond.gen,
+      newGameGen: statsAfterNewGame.gen,
+      newGameSize: statsAfterNewGame.size,
+      genIncremented: statsAfterNewGame.gen > genBeforeNewGame,
+      move1Valid: Boolean(move1 && move1.pieceId),
+      move2Valid: Boolean(move2 && move2.pieceId),
+    };
+  })()`);
+
+  // 1) createGame 之后 TT 是空的
+  assert.equal(result.sizeAfterCreate, 0,
+    `createGame should reset shared TT to empty, got size=${result.sizeAfterCreate}`);
+
+  // 2) 第一次 chooseAIMove 后 TT 有条目(说明搜索确实 populate 了共享 TT)
+  assert.ok(result.sizeAfterFirst > 0,
+    `after first chooseAIMove, shared TT should have entries, got size=${result.sizeAfterFirst}`);
+
+  // 3) 同一局内 generation 不变(说明 TT 在跨回合间被复用,而非每次重建)
+  assert.equal(result.firstGen, result.secondGen,
+    `within same game, TT generation must stay constant (first=${result.firstGen}, second=${result.secondGen})`);
+
+  // 4) 新一局 createGame 触发 reset → gen 递增,size 归零
+  assert.ok(result.genIncremented,
+    `new createGame must bump generation (gen went from ${result.firstGen} to ${result.newGameGen})`);
+  assert.equal(result.newGameSize, 0,
+    `new createGame must reset TT to empty, got size=${result.newGameSize}`);
+
+  // 5) 两次 chooseAIMove 都返回合法走法(功能不退化)
+  assert.ok(result.move1Valid && result.move2Valid,
+    `both chooseAIMove calls must return legal moves (move1Valid=${result.move1Valid}, move2Valid=${result.move2Valid})`);
+});
+

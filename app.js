@@ -49,6 +49,9 @@ let dragState = null;
 
 function createGame(playerSide, difficulty) {
   const now = Date.now();
+  // #54:每开新局清空共享 TT,防止上一局的 Zobrist 命中污染新局搜索结果。
+  // typeof 守卫:某些测试场景可能未走完整加载链,仍能安全调用。
+  if (typeof resetSharedTT === "function") resetSharedTT();
   return {
     id: `game-${now}`,
     status: "preparing",

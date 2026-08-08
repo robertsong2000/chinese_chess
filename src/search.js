@@ -326,7 +326,9 @@ function runAISearch(s) {
     : 1;
   let deadline = startTime + Math.min(baseBudget * factor, TIME_HARD_CAP_MS);
   let maxDepth = SEARCH_DEPTH[s.aiDifficulty] || SEARCH_DEPTH.normal;
-  const tt = createTranspositionTable();
+  // #54:跨回合 TT 复用。同一局游戏的每次 runAISearch 共享 TT → 上一回合深搜结果可命中
+  // → iterative deepening 起点更高 → 同等时间预算下多搜 ~1 ply。
+  const tt = getSharedTT();
   const killers = createKillerTable();
   const history = createHistoryTable();
   const counterMoves = createCountermoveTable();
@@ -695,6 +697,30 @@ function computeZobrist(board, side) {
 
 function createTranspositionTable() {
   return new Map();
+}
+
+// === 跨回合 TT 复用 (#54) ===
+// 之前每次 runAISearch 都 createTranspositionTable() 新建 TT,跨回合信息全丢。
+// 现在把 TT 提到模块作用域(per-game 单例),让每次 chooseAIMove 复用上一回合的 TT 条目。
+// TT 命中使 iterative deepening 在同等时间内多搜 ~1 ply,直接服务"看 5-7 步"目标。
+//
+// 生命周期:createGame → resetSharedTT() → 整表替换 + gen+1,杜绝跨局污染。
+// 局内:runAISearch 调 getSharedTT() 拿到同一 Map,跨回合累积;depth-preferred eviction 自然有上限。
+let _sharedTT = null;
+let _sharedTTGen = 0;
+
+function getSharedTT() {
+  if (!_sharedTT) _sharedTT = createTranspositionTable();
+  return _sharedTT;
+}
+
+function resetSharedTT() {
+  _sharedTTGen += 1;
+  _sharedTT = createTranspositionTable();
+}
+
+function sharedTTStats() {
+  return { size: _sharedTT ? _sharedTT.size : 0, gen: _sharedTTGen };
 }
 
 // === TT mate score 距离调整 (#52) ===

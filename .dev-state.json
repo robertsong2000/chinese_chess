@@ -115,7 +115,7 @@
     {
       "id": 10,
       "name": "棋力深度冲刺 V6(残局理论 + 评估精化,稳定一级棋士 2200)",
-      "todo_count": 3,
+      "todo_count": 4,
       "priority": "P0",
       "rationale": "Phase 1-9 经典启发式与战术评估全完成,V5 加 Verified NMP + Threat Extension + King Attack Zone eval。本阶段从'评估精度'维度继续推进:扩展 endgamePatternBonus(经典必胜残局模式)、Soldier 推进精化、可选的 Piece-Square Table 精化。目标 hard 在 self-play 中对 normal 形成稳定 65%+ 胜率,残局阶段决策更精准。",
       "status": "active"
@@ -1024,6 +1024,22 @@
       "attempts": 1,
       "completed_at": "2026-08-09T03:17:39+08:00",
       "commit_sha": "cb10f1601dbfe6f04f8b73d8ad95dbfa87fc7404"
+    },
+    {
+      "id": 54,
+      "phase": 11,
+      "title": "跨回合 TT 复用(chooseAIMove 跨 move 保留 TT → 等效 +1 ply 搜索深度)",
+      "description": "当前 runAISearch 每次调用 createTranspositionTable() 新建 TT,跨回合信息全丢。把 TT 提到模块作用域(per-game 单例),让每次 chooseAIMove 复用上一回合的 TT 条目。TT 命中使 iterative deepening 在同等时间内多搜 ~1 ply,直接服务'看 5-7 步'。实现:(1) 模块级 Map + generation counter;(2) createGame / newGame 时增 generation;(3) runAISearch 不再 create,而是 getSharedTT() 拿到当前 generation 的 TT;(4) TT entry 加 gen 字段,probe 时若 entry.gen != current 则视为 miss(防 stale);(5) ttStore 写入时带 gen;(6) TT 已有 depth-preferred eviction,跨回合累积自然有上限。测试:新增 1 个 test — 验证连续两次 runAISearch 在同一局游戏中,第二次能命中第一次的 TT 条目(用 sinon-like 钩子或简单通过搜索节点数下降来观察);保留所有现有 54 个测试通过。",
+      "priority": "P0",
+      "estimated_min": 25,
+      "status": "pending",
+      "attempts": 0,
+      "files": [
+        "src/search.js",
+        "src/constants.js",
+        "tests/ai-search.test.js"
+      ],
+      "created_at": "2026-08-09T03:42:45.856781"
     }
   ],
   "history": [
@@ -1454,5 +1470,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 11 #53 Quiescence Check Move Extension 完成。建议下一步:1) 跑长 benchmark (BENCH_LONG=1, 20 局) 验证 #53 真实效果(quiescence checks 是否提升 hardWinRate / 帮助识别 forced check 战术);2) 生成 Phase 11 续 TODO,候选:(a) 跨回合 TT 复用(chooseAIMove 跨 move 保留 TT,直接 +1 ply 搜索深度,需重构 chooseAIMove);(b) Aspiration Window 重新启用验证(评估精度提升后,严格条件 + 大窗口 ±300 + widen re-search);(c) Razoring 重新启用(#41/#49/#51 评估精度提升后,严格条件 + 大 MARGIN);(d) Pawn structure eval(兵结构:连兵 / 双兵同列纵向协同,服务残局必胜);(e) Horse leg detection eval(马腿被堵的马减分,服务 mobility 精度);(f) Cannon screen stability eval(炮架稳定性:炮架易被吃时炮威胁减分);3) 优先 (a) 跨回合 TT 复用 — 直接服务'看 5-7 步',搜索深度 +1 ply 是棋力提升的关键瓶颈。"
+  "next_run_hint": "Phase 11 #54 跨回合 TT 复用 pending。实施后:验证 npm test 全过 → benchmark (BENCH_LONG=1) 看 hardWinRate 是否提升 + 节点数下降。下一步候选:(a) Pawn structure eval(连兵/双兵同列协同,服务残局必胜);(b) Horse leg detection eval(马腿被堵的马减分);(c) Cannon screen stability eval(炮架稳定性);(d) Aspiration Window 重新启用验证(TT 复用后,等价深度+1,窄窗口风险下降)。"
 }
