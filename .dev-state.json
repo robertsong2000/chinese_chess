@@ -44,9 +44,9 @@
     {
       "id": 1.5,
       "name": "棋力冲刺(二级→一级)",
-      "todo_count": 5,
+      "todo_count": 6,
       "priority": "P0",
-      "rationale": "把棋力从三级推到二级/一级棋士"
+      "rationale": "把棋力从三级推到二级/一级棋士(+ SEE 防送子)"
     },
     {
       "id": 2,
@@ -499,11 +499,29 @@
         "中国象棋游戏PRD.md"
       ],
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 20,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T10:12:50.367045+08:00",
+      "commit_sha": "993ff14"
+    },
+    {
+      "id": 28,
+      "phase": 1.5,
+      "category": "棋力-评估",
+      "title": "SEE(静态交换评估)识别深度亏子 capture",
+      "description": "新增 see(board, move) 函数用 negamax 形式计算 capture sequence 净交换价值。在 move ordering 中对 SEE <= -200 的深度亏子 capture 降分到 killer 档,避免搜索明显送子走法。直接服务行为目标'完全不送子'。4 个单测覆盖(非吃子=0、无反吃=正值、被反吃=负值、链式交换)。benchmark 验证 hard 4/4 胜 normal,棋力未退化。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 25,
+      "attempts": 1,
+      "completed_at": "2026-08-08T11:02:24.269521+08:00",
+      "commit_sha": "f0ea7bd"
     }
   ],
   "history": [
@@ -720,6 +738,20 @@
       "action": "completed",
       "summary": "docker-compose 加 healthcheck(wget --spider localhost:80,30s/3 retries)+ src/ 挂载(修复拆分后 src/*.js 404 隐患)+ init:true + logging 限制。docker compose config 通过,15/15 测试通过。",
       "commit_sha": "d7c141e"
+    },
+    {
+      "timestamp": "2026-08-08T10:12:50.367045+08:00",
+      "todo_id": 22,
+      "action": "completed",
+      "summary": "PRD 加第 14 章「当前实现状态」(实现概览 / 已完成特性 / 棋力估算 / 待办路线 / 验证方式)+ 修订历史 v1.1 + 附录顺延为第 15 章。Phase 1/1.5/2/3 全部完成,Phase 3 收尾。(993ff14)",
+      "commit_sha": "993ff14"
+    },
+    {
+      "timestamp": "2026-08-08T11:02:24.269521+08:00",
+      "todo_id": 28,
+      "action": "completed",
+      "summary": "SEE 静态交换评估:see() 函数(negamax 形式)+ move ordering 对 SEE<=-200 的深度亏子 capture 降分到 killer 档 + 4 个单测。benchmark hard 4/4 胜 normal 未退化。",
+      "commit_sha": "f0ea7bd"
     }
   ],
   "rules": [
