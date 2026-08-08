@@ -697,25 +697,53 @@ function createTranspositionTable() {
   return new Map();
 }
 
+// === TT mate score 距离调整 (#52) ===
+// mate score 是"相对当前节点"的距离;TT 是全局共享,同一局面可能在不同 ply 被命中。
+// 不调整会导致:在 ply=2 存的 mate-in-2(+MATE - 2),在 ply=4 读到时仍是 +MATE - 2,
+// 但实际相对该节点的距离应是 +MATE - 4(mate 在该节点之后 0 ply 即发生,与原 ply=2 节点距离 2 不同)。
+//
+// 约定(SF-style):
+//   store(score, ply): 若 score > THRESH → score += ply;若 score < -THRESH → score -= ply。
+//     → 把"相对当前节点"的距离转为"绝对到 mate 的距离"(独立于 ply)。
+//   probe(score, ply): 若 score > THRESH → score -= ply;若 score < -THRESH → score += ply。
+//     → 把绝对距离转回"相对当前节点"的距离。
+// 非 mate 分支(评估分)直接原值返回。
+function ttScoreAdjustStore(score, ply) {
+  if (score > MATE_THRESHOLD) return score + ply;
+  if (score < -MATE_THRESHOLD) return score - ply;
+  return score;
+}
+
+function ttScoreAdjustProbe(score, ply) {
+  if (score > MATE_THRESHOLD) return score - ply;
+  if (score < -MATE_THRESHOLD) return score + ply;
+  return score;
+}
+
 // probe:命中且深度足够 → 直接返回 score 字符串;否则返回 entry 本身(供 bestMove 排序用)
 // 返回值:数字 score 表示可直接用,null 表示无可用条目,object 表示有条元数据但 score 不可用
-function ttProbe(tt, hash, depth, alpha, beta) {
+function ttProbe(tt, hash, depth, alpha, beta, ply = 0) {
   const entry = tt.get(hash);
   if (!entry) return null;
   if (entry.depth >= depth) {
-    if (entry.flag === TT_FLAG_EXACT) return entry.score;
-    if (entry.flag === TT_FLAG_LOWER && entry.score >= beta) return entry.score;
-    if (entry.flag === TT_FLAG_UPPER && entry.score <= alpha) return entry.score;
+    let score = entry.score;
+    if (entry.flag === TT_FLAG_EXACT) return ttScoreAdjustProbe(score, ply);
+    if (entry.flag === TT_FLAG_LOWER) {
+      if (score >= beta) return ttScoreAdjustProbe(score, ply);
+    } else if (entry.flag === TT_FLAG_UPPER) {
+      if (score <= alpha) return ttScoreAdjustProbe(score, ply);
+    }
   }
   return entry;
 }
 
 // store:已有更深条目则保留(避免被浅搜索覆盖),否则替换
-function ttStore(tt, hash, depth, score, flag, bestMoveKey) {
+function ttStore(tt, hash, depth, score, flag, bestMoveKey, ply = 0) {
   const existing = tt.get(hash);
   if (existing && existing.depth > depth) return;
   if (tt.size >= TT_MAX_ENTRIES) ttEvictShallow(tt);
-  tt.set(hash, { depth, score, flag, bestMoveKey });
+  const adjusted = ttScoreAdjustStore(score, ply);
+  tt.set(hash, { depth, score: adjusted, flag, bestMoveKey });
 }
 
 // depth-preferred partial eviction:TT 满时按 depth 升序,删除最浅的 TT_EVICT_RATIO 比例条目。
@@ -738,7 +766,7 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
   // #46 Singular Extension 需要读取 ttEntry.score 与 ttEntry.flag,故保留整个 entry 引用。
   let ttEntry = null;
   if (tt) {
-    const probed = ttProbe(tt, hash, depth, alpha, beta);
+    const probed = ttProbe(tt, hash, depth, alpha, beta, ply);
     if (typeof probed === "number") return probed;
     if (probed) {
       ttBestMoveKey = probed.bestMoveKey;
@@ -754,7 +782,7 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
       board, side, depth - IID_REDUCTION, alpha, beta, aiSide, tt, deadline,
       ply, killers, history, allowNull, extensionsInLine, false, counterMoves, lastOppMove,
     );
-    const reprobe = ttProbe(tt, hash, depth, alpha, beta);
+    const reprobe = ttProbe(tt, hash, depth, alpha, beta, ply);
     if (reprobe && typeof reprobe !== "number" && reprobe.bestMoveKey) {
       ttBestMoveKey = reprobe.bestMoveKey;
       ttEntry = reprobe;
@@ -781,12 +809,12 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
       if (depth >= NULL_MOVE_VERIFY_MIN_DEPTH) {
         const verifyScore = negamax(board, side, depth - 1 - NULL_MOVE_VERIFY_REDUCTION, beta - 1, beta, aiSide, tt, deadline, ply, killers, history, false, extensionsInLine, true, counterMoves, null);
         if (verifyScore >= beta) {
-          if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, null);
+          if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, null, ply);
           return beta;
         }
         // verify 失败:不信任 null cutoff,fall-through 到完整搜索
       } else {
-        if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, null);
+        if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, null, ply);
         return beta;
       }
     } else if (
@@ -827,7 +855,7 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     if (razorStandPat + RAZORING_MARGIN < alpha) {
       const razorScore = quiescence(board, side, alpha, beta, aiSide, QUIESCENCE_DEPTH, deadline, moves);
       if (razorScore <= alpha) {
-        if (tt) ttStore(tt, hash, depth, razorScore, TT_FLAG_UPPER, null);
+        if (tt) ttStore(tt, hash, depth, razorScore, TT_FLAG_UPPER, null, ply);
         return razorScore;
       }
       // fail-high:razorScore > alpha → 继续 main search 拿精确分数与 bestMove
@@ -983,14 +1011,14 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
       if (killers) storeKiller(killers, ply, move);
       if (history && !move.capturedPieceId) storeHistory(history, move, depth);
       if (counterMoves && lastOppMove) storeCountermove(counterMoves, lastOppMove, move);
-      if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, killerKey(move));
+      if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, killerKey(move), ply);
       didCut = true;
       break;
     }
   }
   if (!didCut && tt) {
     const flag = best <= origAlpha ? TT_FLAG_UPPER : TT_FLAG_EXACT;
-    ttStore(tt, hash, depth, best, flag, bestMove ? killerKey(bestMove) : null);
+    ttStore(tt, hash, depth, best, flag, bestMove ? killerKey(bestMove) : null, ply);
   }
   return best;
 }

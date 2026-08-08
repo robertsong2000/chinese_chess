@@ -47,6 +47,9 @@ const PIECE_VALUE = {
 const SEARCH_DEPTH = { easy: 1, normal: 2, hard: 5 };
 const QUIESCENCE_DEPTH = 3;
 const MATE_SCORE = 30000;
+// TT mate score 调整阈值(#52):|score| > 此值视为 mate score,TT 存取时调整 ply 偏移。
+// 设为 MATE_SCORE - 1000:|score| < 阈值 → 正常评估分;>= 阈值 → mate-in-N(N <= 1000 ply,远超实际搜索深度)。
+const MATE_THRESHOLD = MATE_SCORE - 1000;
 const REPEATED_POSITION_PENALTY = 12000;
 const DIRECT_REVERSAL_PENALTY = 2600;
 const RECENT_ROUTE_PENALTY = 420;

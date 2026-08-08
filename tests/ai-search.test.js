@@ -1629,3 +1629,78 @@ test("#51 Soldier refinement: double crossed soldiers in enemy palace trigger ce
     `evaluateBoard(board, RED) should be > 0 (soldier + center + coordination bonuses); got ${result.evalRed}`);
 });
 
+test("#52 TT mate score: store adjusts by +ply, probe adjusts by -ply (winning mate)", () => {
+  // 关键不变量:mate score 在 TT 存取时按 ply 偏移调整,使同一局面的 mate 距离独立于 ply。
+  // 场景:在 ply=2 节点存 "mate-in-3"（score = MATE_SCORE - 3 = 29997)。
+  //   1) ttStore 调整:stored = 29997 + 2 = 29999(绝对距离)
+  //   2) 同一 ply=2 ttProbe:读取 = 29999 - 2 = 29997(原值)
+  //   3) 不同 ply=4 ttProbe:读取 = 29999 - 4 = 29995(相对该节点 mate-in-5,因 mate 远了 2 ply)
+  //   4) 非 mate 分(例如 100):不调整。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const tt = createTranspositionTable();
+    const mateIn3 = MATE_SCORE - 3; // = 29997
+    ttStore(tt, 0xabc123, 5, mateIn3, TT_FLAG_EXACT, "pv-key", 2);
+    const entry = tt.get(0xabc123);
+    const samePlyProbe = ttProbe(tt, 0xabc123, 5, -Infinity, Infinity, 2);
+    const deeperPlyProbe = ttProbe(tt, 0xabc123, 5, -Infinity, Infinity, 4);
+    const shallowerPlyProbe = ttProbe(tt, 0xabc123, 5, -Infinity, Infinity, 0);
+    // 非 mate 分应保持不变
+    ttStore(tt, 0xdef456, 5, 100, TT_FLAG_EXACT, "x", 7);
+    const normalProbe = ttProbe(tt, 0xdef456, 5, -Infinity, Infinity, 3);
+    return {
+      storedScore: entry.score,
+      samePlyProbe,
+      deeperPlyProbe,
+      shallowerPlyProbe,
+      normalProbe,
+      mateIn3,
+      threshold: MATE_THRESHOLD,
+    };
+  })()`);
+  // stored = mateIn3 + 2(absolute distance)
+  assert.equal(result.storedScore, result.mateIn3 + 2,
+    `ttStore at ply=2 must store mate score + ply (29997 + 2 = 29999), got ${result.storedScore}`);
+  // probe at same ply → original score
+  assert.equal(result.samePlyProbe, result.mateIn3,
+    `ttProbe at same ply=2 must return original mate score 29997, got ${result.samePlyProbe}`);
+  // probe at deeper ply=4 → mate is now further away by 2 ply → score decreases by 2
+  assert.equal(result.deeperPlyProbe, result.mateIn3 - 2,
+    `ttProbe at ply=4 must return mateIn3 - 2 = 29995 (mate further away), got ${result.deeperPlyProbe}`);
+  // probe at shallower ply=0 → mate is closer by 2 ply → score increases by 2
+  assert.equal(result.shallowerPlyProbe, result.mateIn3 + 2,
+    `ttProbe at ply=0 must return mateIn3 + 2 = 29999 (mate closer), got ${result.shallowerPlyProbe}`);
+  // non-mate score unchanged
+  assert.equal(result.normalProbe, 100,
+    `non-mate score 100 must be returned unchanged, got ${result.normalProbe}`);
+});
+
+test("#52 TT mate score: losing mate (negative) adjusts symmetrically", () => {
+  // 对称性:负 mate（被将死）也要按 ply 调整,符号相反。
+  // 场景:ply=3 节点存 "-(MATE - 2)" = -29998。
+  //   store: -29998 - 3 = -30001
+  //   probe 同 ply: -30001 + 3 = -29998
+  //   probe ply=5（更深,被将死更远 → 不那么负）: -30001 + 5 = -29996
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const tt = createTranspositionTable();
+    const losingMate = -(MATE_SCORE - 2); // = -29998
+    ttStore(tt, 0x999, 4, losingMate, TT_FLAG_EXACT, "k", 3);
+    const entry = tt.get(0x999);
+    const samePly = ttProbe(tt, 0x999, 4, -Infinity, Infinity, 3);
+    const deeperPly = ttProbe(tt, 0x999, 4, -Infinity, Infinity, 5);
+    return {
+      storedScore: entry.score,
+      samePly,
+      deeperPly,
+      losingMate,
+    };
+  })()`);
+  assert.equal(result.storedScore, result.losingMate - 3,
+    `ttStore of losing mate at ply=3 must store score - ply (-29998 - 3 = -30001), got ${result.storedScore}`);
+  assert.equal(result.samePly, result.losingMate,
+    `ttProbe at same ply=3 must return -29998, got ${result.samePly}`);
+  assert.equal(result.deeperPly, result.losingMate + 2,
+    `ttProbe at deeper ply=5 (mate further away = less negative) must return -29996, got ${result.deeperPly}`);
+});
+
