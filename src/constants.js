@@ -203,6 +203,17 @@ const LMP_MIN_WINDOW = 1;
 const IID_MIN_DEPTH = 3;
 const IID_REDUCTION = 2;
 
+// === Countermove Heuristic ===
+// 经典走法排序启发式,与 killer/history 互补:
+//   - killer:同 ply 上导致 cutoff 的 quiet 走法(场景级)
+//   - history:全局 (from,to) cutoff 次数(全局级)
+//   - countermove:针对"对方上一步走法"的最佳回应(refutation 级)
+// 当本方搜索中某走法 M 导致 beta cutoff,且对方上一走法是 oppMove,
+// 则记下 `counterMoves[oppMove.key] = M.key`。下次遇到同样 oppMove 时,M 排序优先。
+// 命中率约 10-15%,经典实现给搜索效率 +5-10%(直接服务"看 5-7 步")。
+// Bonus 取值:介于 KILLER_BONUS_SECOND(7000)与 HISTORY_MAX_BONUS(6000)之间。
+const COUNTERMOVE_BONUS = 6500;
+
 // === Time management ===
 // 基准思考时间(benchmark 用 timeScale 包装 performance.now,此处维持原值以确保 wall clock 可控)。
 // hard 通过 allocateTimeFactor 动态调整:残局/受困多想,开局/复杂少想,关键局面延伸深度。

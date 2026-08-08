@@ -329,6 +329,7 @@ function runAISearch(s) {
   const tt = createTranspositionTable();
   const killers = createKillerTable();
   const history = createHistoryTable();
+  const counterMoves = createCountermoveTable();
   let best = orderMoves(s.board, rootMoves, s.currentSide, s.currentSide)[0];
 
   const scoreHistory = [];
@@ -352,7 +353,7 @@ function runAISearch(s) {
 
     let result = searchRootAtDepth(
       s, rootMoves, depth, best, alpha, beta,
-      deadline, tt, killers, history, rootCycleOpts,
+      deadline, tt, killers, history, rootCycleOpts, counterMoves,
     );
 
     // Fail-high/fail-low:aspiration 落窗 → 用全窗口 re-search 拿到真实分数与最佳走法。
@@ -363,7 +364,7 @@ function runAISearch(s) {
     ) {
       const reSearch = searchRootAtDepth(
         s, rootMoves, depth, result.bestMove, -Infinity, Infinity,
-        deadline, tt, killers, history, rootCycleOpts,
+        deadline, tt, killers, history, rootCycleOpts, counterMoves,
       );
       if (!reSearch.timedOut) result = reSearch;
     }
@@ -411,7 +412,7 @@ function runAISearch(s) {
 // (-alpha-1, -alpha) 试探;zero-window 落在 (alpha, beta) 之间则用 full window re-search。
 // 返回 {bestMove, bestScore, timedOut}。superRootAspiration 由调用方处理 fail-high/low。
 function searchRootAtDepth(s, rootMoves, depth, prevBest, alpha, beta,
-  deadline, tt, killers, history, rootCycleOpts) {
+  deadline, tt, killers, history, rootCycleOpts, counterMoves) {
   const ordered = orderMoves(s.board, rootMoves, s.currentSide, s.currentSide, prevBest);
   if (!ordered.length) return { bestMove: null, bestScore: -Infinity, timedOut: true };
 
@@ -434,18 +435,21 @@ function searchRootAtDepth(s, rootMoves, depth, prevBest, alpha, beta,
       score = -negamax(
         childBoard, opposite(s.currentSide), depth - 1, -beta, -alphaLocal,
         s.currentSide, tt, deadline, 1, killers, history,
+        true, 0, true, counterMoves, move,
       ) - penalty;
     } else {
       // 其余走法:zero-window probe
       score = -negamax(
         childBoard, opposite(s.currentSide), depth - 1, -alphaLocal - 1, -alphaLocal,
         s.currentSide, tt, deadline, 1, killers, history,
+        true, 0, true, counterMoves, move,
       ) - penalty;
       // zero-window 失败 → 落在 (alpha, beta) 之间 → full window re-search
       if (score > alphaLocal && score < beta) {
         score = -negamax(
           childBoard, opposite(s.currentSide), depth - 1, -beta, -alphaLocal,
           s.currentSide, tt, deadline, 1, killers, history,
+          true, 0, true, counterMoves, move,
         ) - penalty;
       }
     }
@@ -541,7 +545,7 @@ function preferNonRepeatingMoves(board, moves, side, opts = {}) {
   return nonRepeating.length ? nonRepeating : moves;
 }
 
-function moveOrderingScore(board, move, side, aiSide, preferredMove = null, killersAtPly = null, history = null, ttBestMoveKey = null) {
+function moveOrderingScore(board, move, side, aiSide, preferredMove = null, killersAtPly = null, history = null, ttBestMoveKey = null, counterMoves = null, lastOppMove = null) {
   let score = 0;
   if (preferredMove && move.pieceId === preferredMove.pieceId && move.toX === preferredMove.toX && move.toY === preferredMove.toY) score += 100000;
   if (ttBestMoveKey && killerKey(move) === ttBestMoveKey) score += TT_BONUS;
@@ -569,6 +573,16 @@ function moveOrderingScore(board, move, side, aiSide, preferredMove = null, kill
         matchedKiller = true;
       }
     }
+    // Countermove:对方上一走法 oppMove 的 refutation(曾导致 cutoff 的回应)。
+    // 与 killer/history 互补:killer 是"同 ply 的 cutoff 走法",history 是"全局 cutoff 频次",
+    // countermove 是"针对对方具体走法的最佳回应"。命中后视为类 killer 优先级。
+    if (!matchedKiller && counterMoves && lastOppMove) {
+      const cmKey = counterMoves[killerKey(lastOppMove)];
+      if (cmKey && cmKey === killerKey(move)) {
+        score += COUNTERMOVE_BONUS;
+        matchedKiller = true;
+      }
+    }
     if (!matchedKiller && history) score += historyOrderingBonus(history, move);
   }
   const next = applyMoveToBoard(board, move);
@@ -578,9 +592,9 @@ function moveOrderingScore(board, move, side, aiSide, preferredMove = null, kill
   return score;
 }
 
-function orderMoves(board, moves, side, aiSide, preferredMove = null, killersAtPly = null, history = null, ttBestMoveKey = null) {
+function orderMoves(board, moves, side, aiSide, preferredMove = null, killersAtPly = null, history = null, ttBestMoveKey = null, counterMoves = null, lastOppMove = null) {
   return moves
-    .map((move) => ({ move, score: moveOrderingScore(board, move, side, aiSide, preferredMove, killersAtPly, history, ttBestMoveKey) }))
+    .map((move) => ({ move, score: moveOrderingScore(board, move, side, aiSide, preferredMove, killersAtPly, history, ttBestMoveKey, counterMoves, lastOppMove) }))
     .sort((a, b) => b.score - a.score)
     .map(({ move }) => move);
 }
@@ -603,6 +617,18 @@ function storeKiller(killers, ply, move) {
   if (slot[0] === key) return;
   slot[1] = slot[0];
   slot[0] = key;
+}
+
+// === Countermove Heuristic (#44) ===
+// 表存:对方上一走法的 key → 本方曾对该 oppMove 做出最佳回应(cutoff)的走法 key。
+// 用 plain object,生命周期与 killers/history 一致(单次 chooseAIMove 内有效)。
+function createCountermoveTable() {
+  return Object.create(null);
+}
+
+function storeCountermove(table, oppMove, move) {
+  if (!table || !oppMove || !move) return;
+  table[killerKey(oppMove)] = killerKey(move);
 }
 
 function squareIndex(x, y) {
@@ -686,7 +712,7 @@ function ttEvictShallow(tt) {
   for (let i = 0; i < evict; i++) tt.delete(entries[i][0]);
 }
 
-function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = Infinity, ply = 0, killers = null, history = null, allowNull = true, extensionsInLine = 0, iidAllowed = true) {
+function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = Infinity, ply = 0, killers = null, history = null, allowNull = true, extensionsInLine = 0, iidAllowed = true, counterMoves = null, lastOppMove = null) {
   if (performance.now() > deadline) return evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
   const inCheck = isInCheck(board, side);
   const hash = tt ? computeZobrist(board, side) : 0;
@@ -704,7 +730,7 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
   if (tt && iidAllowed && !ttBestMoveKey && depth >= IID_MIN_DEPTH && ply > 0) {
     negamax(
       board, side, depth - IID_REDUCTION, alpha, beta, aiSide, tt, deadline,
-      ply, killers, history, allowNull, extensionsInLine, false,
+      ply, killers, history, allowNull, extensionsInLine, false, counterMoves, lastOppMove,
     );
     const reprobe = ttProbe(tt, hash, depth, alpha, beta);
     if (reprobe && typeof reprobe !== "number" && reprobe.bestMoveKey) {
@@ -719,7 +745,7 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     return quiescence(board, side, alpha, beta, aiSide, QUIESCENCE_DEPTH, deadline, moves);
   }
   if (allowNull && depth >= NULL_MOVE_MIN_DEPTH && !inCheck && beta < Infinity && beta > -Infinity) {
-    const nullScore = -negamax(board, opposite(side), depth - 1 - NULL_MOVE_REDUCTION, -beta, -beta + 1, aiSide, tt, deadline, ply + 1, killers, history, false);
+    const nullScore = -negamax(board, opposite(side), depth - 1 - NULL_MOVE_REDUCTION, -beta, -beta + 1, aiSide, tt, deadline, ply + 1, killers, history, false, extensionsInLine, true, counterMoves, null);
     if (nullScore >= beta) {
       if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, null);
       return beta;
@@ -794,7 +820,7 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
   let bestMove = null;
   let didCut = false;
   const killersAtPly = killers ? killers[Math.min(ply, killers.length - 1)] : null;
-  const orderedMoves = orderMoves(board, moves, side, aiSide, null, killersAtPly, history, ttBestMoveKey);
+  const orderedMoves = orderMoves(board, moves, side, aiSide, null, killersAtPly, history, ttBestMoveKey, counterMoves, lastOppMove);
   const canReduce = depth >= LMR_MIN_DEPTH && orderedMoves.length > LMR_FULL_MOVE_COUNT;
   // Principal Variation Search (PVS):首走法(走法排序后,通常是 TT move/killer)用 full window;
   // 其余走法用 zero-window (-alpha-1, -alpha) 试探,如果落在 (alpha, beta) 之间再 re-search with full window。
@@ -825,17 +851,17 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
       continue;
     }
     if (i === 0) {
-      score = -negamax(childBoard, opposite(side), extDepth, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt);
+      score = -negamax(childBoard, opposite(side), extDepth, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt, true, counterMoves, move);
     } else {
       // 给将军的走法不 LMR(它是战术性强走,降深度会丢失关键变化)
       const canLMR = canReduce && i >= LMR_FULL_MOVE_COUNT && !isTactical && !givesCheck;
       const probeDepth = canLMR ? depth - 1 - LMR_REDUCTION : extDepth;
-      score = -negamax(childBoard, opposite(side), probeDepth, -alpha - 1, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt);
+      score = -negamax(childBoard, opposite(side), probeDepth, -alpha - 1, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt, true, counterMoves, move);
       if (canLMR && score > alpha) {
-        score = -negamax(childBoard, opposite(side), extDepth, -alpha - 1, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt);
+        score = -negamax(childBoard, opposite(side), extDepth, -alpha - 1, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt, true, counterMoves, move);
       }
       if (score > alpha && score < beta) {
-        score = -negamax(childBoard, opposite(side), extDepth, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt);
+        score = -negamax(childBoard, opposite(side), extDepth, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt, true, counterMoves, move);
       }
     }
     if (score > best) {
@@ -846,6 +872,7 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     if (alpha >= beta) {
       if (killers) storeKiller(killers, ply, move);
       if (history && !move.capturedPieceId) storeHistory(history, move, depth);
+      if (counterMoves && lastOppMove) storeCountermove(counterMoves, lastOppMove, move);
       if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, killerKey(move));
       didCut = true;
       break;

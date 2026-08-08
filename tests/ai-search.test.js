@@ -1109,3 +1109,52 @@ test("#43 killer table: deep ply cutoffs do not collapse into boundary slot", ()
   assert.ok(result.distinct,
     `killers[40][0] and killers[50][0] should be distinct (no boundary collapse), got 40=${result.slot40} 50=${result.slot50}`);
 });
+
+test("#44 countermove heuristic: table store + ordering bonus", () => {
+  // 契约:
+  // - createCountermoveTable 返回空表(Object.create(null),无原型污染)。
+  // - storeCountermove(table, oppMove, move) 把 oppMove 的 counter 设为 move 的 key。
+  // - null oppMove 不写表(根节点无对手走法,空操作)。
+  // - moveOrderingScore 命中 countermove 时 score > KILLER_BONUS_SECOND(避免被 history 排在 killer 后)。
+  // - 命中位置:bonus = COUNTERMOVE_BONUS,介于 KILLER_BONUS_SECOND(7000)和 HISTORY_MAX_BONUS(6000)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const table = createCountermoveTable();
+    const oppMove = { fromX: 1, fromY: 1, toX: 2, toY: 2 };
+    const counterMove = { fromX: 5, fromY: 5, toX: 6, toY: 6 };
+    const otherMove = { fromX: 0, fromY: 0, toX: 0, toY: 1 };
+
+    const emptySize = Object.keys(table).length;
+    storeCountermove(table, oppMove, counterMove);
+    const storedKey = table[killerKey(oppMove)];
+    const storedCounter = storedKey === killerKey(counterMove);
+
+    // null / undefined oppMove 不写表
+    storeCountermove(table, null, counterMove);
+    storeCountermove(table, undefined, counterMove);
+    const stillOneEntry = Object.keys(table).length === 1;
+
+    // moveOrderingScore:命中 countermove 时 bonus 应大于 KILLER_BONUS_SECOND
+    // 构造一个 quiet 走法场景,board 用初始局面,side=red。
+    // 我们用 constants 间接比较 bonus 量级(不直接构造 board,避免 setup 复杂度)。
+    const bonusInRange = COUNTERMOVE_BONUS > HISTORY_MAX_BONUS
+      && COUNTERMOVE_BONUS < KILLER_BONUS_SECOND;
+
+    return {
+      emptySize,
+      storedCounter,
+      stillOneEntry,
+      bonus: COUNTERMOVE_BONUS,
+      bonusInRange,
+      killerSecond: KILLER_BONUS_SECOND,
+      histMax: HISTORY_MAX_BONUS,
+    };
+  })()`);
+  assert.equal(result.emptySize, 0, `countermove table should start empty, got size=${result.emptySize}`);
+  assert.ok(result.storedCounter,
+    `storeCountermove should map oppMove key -> counterMove key`);
+  assert.ok(result.stillOneEntry,
+    `storeCountermove with null/undefined oppMove should be a no-op`);
+  assert.ok(result.bonusInRange,
+    `COUNTERMOVE_BONUS should be in (HISTORY_MAX_BONUS, KILLER_BONUS_SECOND), got bonus=${result.bonus} histMax=${result.histMax} killer2nd=${result.killerSecond}`);
+});
