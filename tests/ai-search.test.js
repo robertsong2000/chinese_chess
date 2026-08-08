@@ -742,3 +742,56 @@ test("#35 benchmark tactics: 5 puzzles with valid contract", () => {
     assert.ok(t.boardSrc.includes("alive: true"), `${t.id}: pieces must have alive: true`);
   }
 });
+
+test("#39 LMP constants are configured for safe shallow forward pruning", () => {
+  // 契约:
+  // - LMP_MAX_DEPTH=2:经典值(浅层启用,深层 ordering 误判风险上升,禁用)。
+  // - LMP_MIN_INDEX=4:走法排序后 [0]=TT best / [1-2]=killers / [3]=good capture 或 history top,
+  //   第 5+ 个走法才考虑 prune。与 LMR_FULL_MOVE_COUNT=3 错开,让 LMR 处理 [3+],LMP 处理 [4+]。
+  // - LMP_MIN_WINDOW=1:与 futility 同理,PVS zero-window probe 路径下不启用,避免 bestMove 错过。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    maxDepth: LMP_MAX_DEPTH,
+    minIndex: LMP_MIN_INDEX,
+    minWindow: LMP_MIN_WINDOW,
+  }))()`);
+  assert.equal(result.maxDepth, 2, "LMP_MAX_DEPTH should be 2 (shallow only)");
+  assert.ok(result.minIndex >= 3 && result.minIndex <= 6,
+    `LMP_MIN_INDEX should be in [3, 6] (balance prune aggressiveness vs safety), got ${result.minIndex}`);
+  assert.equal(result.minWindow, 1, "LMP_MIN_WINDOW should be 1 (skip zero-window probe path)");
+});
+
+test("#39 LMP: hard AI still finds the free horse capture in shallow search tactic", () => {
+  // 战术局面:复用 futility/razor 测试的"黑车吃红马"战术,验证 LMP 启用后:
+  // 1) hard AI 仍能找到吃马走法(capture move 走 LMP 例外分支,不被跳过);
+  // 2) LMP 在 depth<=2 的浅子节点上会 prune 排序靠后的 quiet 走法,但吃马走法是 high-priority capture,
+  //    一定在 [0] 或 [1] 位置,不会被 LMP 跳过。
+  // 关键:该测试曾在 #38 (quiescence delta pruning) 中验证过,LMP 启用后必须仍然通过。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rh', side: SIDES.RED, type: TYPES.HORSE, x: 1, y: 9, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 1, y: 5, alive: true },
+    ];
+    state = createGame(SIDES.RED, "hard");
+    state.status = "playing";
+    state.currentSide = SIDES.BLACK;
+    state.board = board;
+    state.snapshots = [];
+    state.moveHistory = [];
+    const move = chooseAIMove();
+    return {
+      ateHorse: Boolean(move && move.pieceId === 'bc' && move.toX === 1 && move.toY === 9),
+      pieceId: move && move.pieceId,
+      toX: move && move.toX,
+      toY: move && move.toY,
+    };
+  })()`);
+  assert.equal(
+    result.ateHorse,
+    true,
+    `hard AI should capture the free horse despite LMP; got pieceId=${result.pieceId} toX=${result.toX} toY=${result.toY}`,
+  );
+});

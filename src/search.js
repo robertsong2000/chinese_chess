@@ -768,6 +768,14 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     if (getStandPat() + FUTILITY_MARGIN <= alpha) futilityPrunable = true;
   }
 
+  // === Late Move Pruning(LMP)flag:浅层节点,排序靠后的 quiet 非 check 走法直接 skip ===
+  // 与 futility 互补 — 不依赖 standPat,仅基于 (depth, window, index, isQuiet, !check)。
+  // PVS zero-window probe 路径下不启用(同 futility 理由:probe 期望精确 score,误 prune 会改 bestMove)。
+  const lmpPrunable = !inCheck
+    && depth >= 1
+    && depth <= LMP_MAX_DEPTH
+    && beta - alpha > LMP_MIN_WINDOW;
+
   let best = -Infinity;
   let bestMove = null;
   let didCut = false;
@@ -795,6 +803,11 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     // Futility pruning:i>=1(保留首走法确保 bestMove 非空)+ futile 节点 + quiet 非 check 走法 → 跳过。
     // capture/check 走法仍搜索,因为它们是战术性强走,有改 alpha 的可能。
     if (i >= 1 && futilityPrunable && !isTactical && !givesCheck) {
+      continue;
+    }
+    // Late Move Pruning:i >= LMP_MIN_INDEX + 浅层 + full window + quiet 非 check → 跳过。
+    // 与 futility 互补:LMP 仅依赖位置(走法排序后第 5+ 个),futility 依赖评估(standPat 远低于 alpha)。
+    if (i >= LMP_MIN_INDEX && lmpPrunable && !isTactical && !givesCheck) {
       continue;
     }
     if (i === 0) {

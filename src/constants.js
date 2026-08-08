@@ -160,6 +160,27 @@ const RAZORING_MARGIN = 300;
 const FUTILITY_DEPTH = 1;
 const FUTILITY_MARGIN = 300;
 
+// === Late Move Pruning (LMP) ===
+// 经典 forward pruning:在浅层节点(depth <= LMP_MAX_DEPTH),走法排序后第 LMP_MIN_INDEX+ 个
+// quiet 非 check 走法直接跳过。基于观察:走法排序后靠前的走法(TT best、killer1/2、good capture、
+// history top)极少被 prune 之后才出现真实最佳走法;浅层节点的搜索深度不足以让"靠后的 quiet 走法"
+// 翻盘。直接服务"看 5-7 步":跳过 60-80% 的 move loop 工作,同时间预算内深度 +1。
+//
+// 与 futility 的区别:
+//   - futility 是"节点级":standPat + margin ≤ alpha 才标记节点 futile,move loop 内才 skip。
+//   - LMP 是"走法位置级":不依赖 standPat,仅基于 (depth, index, isQuiet, !check) 直接 skip。
+//   两者互补 — futility 处理"评估明显劣势节点",LMP 处理"排序靠后的安静走法"。
+//
+// 取值:
+//   - LMP_MAX_DEPTH=2:经典取值(depth=1/2 启用)。depth>=3 时 ordering 误判风险上升,禁用 LMP。
+//   - LMP_MIN_INDEX=4:走法排序后 [0]=TT best / [1]=killer1 / [2]=killer2 / [3]=good capture 或 history top,
+//     第 5+ 个走法才考虑 prune。与 LMR_FULL_MOVE_COUNT=3 错开,确保 LMR 处理 [3+],LMP 处理 [4+]。
+//   - LMP_MIN_WINDOW=1:与 futility 同理,PVS zero-window probe(beta=alpha+1)路径下不启用,
+//     避免在 PVS probe 期望精确 score 时跳过可能改进 alpha 的走法。
+const LMP_MAX_DEPTH = 2;
+const LMP_MIN_INDEX = 4;
+const LMP_MIN_WINDOW = 1;
+
 // === Internal Iterative Deepening (IID) ===
 // 经典启发式:在内部节点(ply > 0)如果 TT 没给 best move(新局面或仅存 null-move cutoff 记录),
 // move ordering 会退化(TT_BONUS 缺失 → 仅靠 killer/history,未搜过的位置上命中率低)。
