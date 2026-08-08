@@ -542,9 +542,11 @@
         "tests/ai-search.test.js"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 20,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-08T11:30:48.182848+08:00",
+      "commit_sha": "7897be0"
     },
     {
       "id": 30,
@@ -864,6 +866,13 @@
       "action": "completed",
       "summary": "SEE 静态交换评估:see() 函数(negamax 形式)+ move ordering 对 SEE<=-200 的深度亏子 capture 降分到 killer 档 + 4 个单测。benchmark hard 4/4 胜 normal 未退化。",
       "commit_sha": "f0ea7bd"
+    },
+    {
+      "timestamp": "2026-08-08T11:30:48.182848+08:00",
+      "todo_id": 29,
+      "action": "completed",
+      "summary": "Check Extension:negamax PVS loop 内若走法给对手将军则该线 depth+1 ply;3 个常量(CHECK_EXTENSION_PLY=1/MAX=2/MIN_DEPTH=2);negamax 加 extensionsInLine 参数累加,givesCheck 走法不 LMR;仅 depth>=2 节点做避免 isInCheck 放大成瓶颈。2 个新测试(契约 + 战术局面)。npm test 21/21 pass,hard vs normal 1 局 hard 78 ply checkmate 胜未退化。",
+      "commit_sha": "7897be0"
     }
   ],
   "rules": [
@@ -875,5 +884,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "下次运行应做 id=29 Check Extension(被将军时延伸 +1 ply)。预估 20 分钟。后续 phase 4 待办:#30 Aspiration Window、#31 Futility Pruning、#32 IID、#33 战术检测、#34 实用残局、#35 tactics benchmark。"
+  "next_run_hint": "下次运行应做 id=30 Aspiration Window + Root PVS。预估 25 分钟。后续 phase 4 待办:#31 Futility Pruning、#32 IID、#33 战术检测、#34 实用残局、#35 tactics benchmark。"
 }
