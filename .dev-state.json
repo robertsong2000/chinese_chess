@@ -32,7 +32,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 11,
+  "current_phase": 12,
   "phases": [
     {
       "id": 1,
@@ -127,6 +127,13 @@
       "priority": "P0",
       "rationale": "Phase 1-10 经典启发式与战术评估全完成,V6 完成 TT mate score 距离调整。本阶段从'quiescence 战术识别'维度继续推进:扩展 quiescence 在 !inCheck 时搜能给将军的 quiet 走法(quiescence checks),识别'将军-抽将/抽子'战术组合。目标 hard 在 self-play 中维持稳定 65%+ 胜率,quiescence 不再漏看 forced check 战术。",
       "status": "active"
+    },
+    {
+      "id": 12,
+      "name": "评估精化 V8(Tempo + 开局 + pinned mobility,稳定一级棋士 2200)",
+      "todo_count": 4,
+      "priority": "P0",
+      "rationale": "Phase 7-11 完成 quiescence/TT/马腿/叠炮,但 evaluateBoard 仍是纯静态对称评估,缺经典评估精化项。本阶段补 tempo(走子方加分,直接对应先手优势)+ 开局中炮(开局阶段最重要的战术结构)+ pinned mobility(让 pin 战术在估值层面进一步精确),稳定一级棋士水平。"
     }
   ],
   "todos": [
@@ -1081,6 +1088,71 @@
       "completed_at": "2026-08-09T04:43:57.262478+08:00",
       "commit_sha": "4277327",
       "full_commit_sha": "427732791330e3cf47c0ec3d569c6345e7bd91e6"
+    },
+    {
+      "id": 57,
+      "phase": 12,
+      "title": "Tempo Bonus(走子方 +TEMPO_BONUS,经典评估精化)",
+      "priority": "P0",
+      "status": "in_progress",
+      "estimated_min": 20,
+      "attempts": 0,
+      "description": "evaluateBoard 当前是纯静态对称评估,缺失经典 tempo(走子方优势)维度。中国象棋中先手是公认优势(类似国际象棋 ~20-40cp)。实现:(1) constants.js 加 TEMPO_BONUS=15(保守值,远低于兵 100);(2) evaluateBoard 加可选 side 参数(默认 null 保持向后兼容,不破坏初始对称测试);(3) side 传入时给 side 方 +TEMPO_BONUS,对方 -TEMPO_BONUS;(4) negamax + quiescence 3 个 evaluateBoard callsite 改为传入 side;(5) 新增测试验证 side=RED vs side=BLACK 评估差 = 2*TEMPO_BONUS。直接服务『看 5-7 步』(更精确评估 → TT 内深度搜索受益)+ 『中局战术组合能力』(主动方加成)。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ],
+      "acceptance_criteria": [
+        "TEMPO_BONUS 常量定义且 > 0",
+        "evaluateBoard 第三参数 side 默认 null,向后兼容",
+        "negamax + quiescence 所有 evaluateBoard 调用传入 side",
+        "新增测试:相同局面 side=RED vs side=BLACK 差 = 2*TEMPO_BONUS",
+        "现有初始对称测试仍 pass",
+        "npm test 全过"
+      ]
+    },
+    {
+      "id": 58,
+      "phase": 12,
+      "title": "Center Cannon Opening Bonus(开局中炮加分)",
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "description": "开局中炮(炮在 x=4, y=0 红方 / y=9 黑方,即原位)是中国象棋开局最经典的攻击结构之一,威胁中卒/打通卒林线。当前 evaluateBoard 不识别此结构。实现:(1) constants.js 加 CENTER_CANNON_OPENING_BONUS=20;(2) search.js 加 isOpening(board) 判定(双方非将子力 > 阈值);(3) evaluateBoard 给开局阶段且炮在原位中线的炮 +BONUS;(4) 测试验证开局中炮加分、过河炮不加、残局不加。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ]
+    },
+    {
+      "id": 59,
+      "phase": 12,
+      "title": "Pinned Piece Mobility Penalty(被钉子的活动性归零)",
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "description": "当前 tacticBonus 已识别 pin 给进攻方加分,但被钉子仍按正常计算 mobility。经典 AI 中,被绝对钉死的子其 mobility 应归零(因为任何移动都会暴露将)。实现:(1) search.js 加 findPinnedPieces(board, side) 返回被钉死子的集合;(2) evaluateBoard 内 mobility 计算跳过被钉子;(3) 测试:车-pin-马 结构,马 mobility=0(原值 >0)。",
+      "files": [
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ]
+    },
+    {
+      "id": 60,
+      "phase": 12,
+      "title": "Self-play 退化回归测试(防止评估精化引入退化)",
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "description": "Phase 5/7 曾因评估调整引发 self-play 退化(hard 输 normal)。建立 baseline self-play 测试:固定 seed 跑 4 局 hard vs normal,断言 hardWinRate >= 50%。本次新增 Phase 12 各项落地后此测试自动覆盖。",
+      "files": [
+        "tests/ai-search.test.js"
+      ]
     }
   ],
   "history": [

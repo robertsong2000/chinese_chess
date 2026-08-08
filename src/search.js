@@ -784,7 +784,7 @@ function ttEvictShallow(tt) {
 }
 
 function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = Infinity, ply = 0, killers = null, history = null, allowNull = true, extensionsInLine = 0, iidAllowed = true, counterMoves = null, lastOppMove = null) {
-  if (performance.now() > deadline) return evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
+  if (performance.now() > deadline) return evaluateBoard(board, aiSide, side) * (side === aiSide ? 1 : -1);
   const inCheck = isInCheck(board, side);
   const hash = tt ? computeZobrist(board, side) : 0;
   const origAlpha = alpha;
@@ -862,7 +862,7 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
   let standPatCache = null;
   const getStandPat = () => {
     if (standPatCache === null) {
-      standPatCache = evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
+      standPatCache = evaluateBoard(board, aiSide, side) * (side === aiSide ? 1 : -1);
     }
     return standPatCache;
   };
@@ -1099,7 +1099,7 @@ function see(board, move) {
 
 function quiescence(board, side, alpha, beta, aiSide, depth, deadline, legalMoves = null) {
   const inCheck = isInCheck(board, side);
-  const standPat = evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
+  const standPat = evaluateBoard(board, aiSide, side) * (side === aiSide ? 1 : -1);
   if (depth === 0 || performance.now() > deadline) return standPat;
   if (!inCheck) {
     if (standPat >= beta) return beta;
@@ -1164,7 +1164,7 @@ function quiescence(board, side, alpha, beta, aiSide, depth, deadline, legalMove
   return alpha;
 }
 
-function evaluateBoard(board, aiSide) {
+function evaluateBoard(board, aiSide, side = null) {
   let score = 0;
   const controlMaps = buildControlMaps(board);
   const endgame = isEndgame(board);
@@ -1232,6 +1232,12 @@ function evaluateBoard(board, aiSide) {
   if (endgame) {
     score += endgameSoldierCoordinationBonus(board, aiSide);
     score -= endgameSoldierCoordinationBonus(board, opposite(aiSide));
+  }
+  // #57 Tempo Bonus:走子方 +TEMPO_BONUS,反映先手优势(主动权)。
+  // 仅当 side 显式传入时启用(negamax/quiescence 内部调用)。
+  // 直接调用 evaluateBoard(board, aiSide) 不传 side → 评估对称,向后兼容。
+  if (side !== null) {
+    score += (side === aiSide ? 1 : -1) * TEMPO_BONUS;
   }
   return score;
 }

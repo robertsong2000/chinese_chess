@@ -1980,4 +1980,70 @@ test("#56 cannonBattery: stacked cannons (same column, aligned target) trigger b
     `non-aligned cannons should give 0, got ${result.diagonal}`);
 });
 
+test("#57 tempo bonus constants are configured for side-to-move bonus", () => {
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    tempoBonus: TEMPO_BONUS,
+    isNumber: typeof TEMPO_BONUS === 'number',
+    isPositive: TEMPO_BONUS > 0,
+    inExpectedRange: TEMPO_BONUS >= 8 && TEMPO_BONUS <= 30,
+  }))()`);
+  assert.equal(result.isNumber, true, "TEMPO_BONUS must be a number");
+  assert.equal(result.isPositive, true, "TEMPO_BONUS must be > 0");
+  assert.equal(result.inExpectedRange, true,
+    `TEMPO_BONUS should be in [8, 30] (conservative, < soldier 100), got ${result.tempoBonus}`);
+});
+
+test("#57 tempo bonus: evaluateBoard(board, aiSide, side) gives side-to-move a +TEMPO_BONUS", () => {
+  const engine = createEngine();
+  // 用一个非对称的简单局面(红方多一兵),验证:
+  // 1) 不传 side:对称评估(向后兼容)
+  // 2) side = aiSide:走子方加 TEMPO_BONUS
+  // 3) side = opposite(aiSide):走子方是对方 → 我方视角 -TEMPO_BONUS
+  // 4) side=aiSide vs side=opposite(aiSide) 差 = 2 * TEMPO_BONUS
+  const result = engine.json(`(() => {
+    const board = initialPieces();
+    // 移除一颗黑兵,让局面非对称(否则对称局面 RED/BLACK 视角都为 0,差异不直观)
+    const blackSoldierIdx = board.findIndex((p) => p.alive && p.side === SIDES.BLACK && p.type === TYPES.SOLDIER);
+    if (blackSoldierIdx >= 0) board.splice(blackSoldierIdx, 1);
+
+    // aiSide = RED 视角
+    const redViewNoSide = evaluateBoard(board, SIDES.RED);
+    const redViewRedToMove = evaluateBoard(board, SIDES.RED, SIDES.RED);
+    const redViewBlackToMove = evaluateBoard(board, SIDES.RED, SIDES.BLACK);
+
+    // aiSide = BLACK 视角(应该与 RED 视角相反符号)
+    const blackViewNoSide = evaluateBoard(board, SIDES.BLACK);
+    const blackViewBlackToMove = evaluateBoard(board, SIDES.BLACK, SIDES.BLACK);
+
+    return {
+      redViewNoSide,
+      redViewRedToMove,
+      redViewBlackToMove,
+      blackViewNoSide,
+      blackViewBlackToMove,
+      tempoBonus: TEMPO_BONUS,
+      diff: redViewRedToMove - redViewBlackToMove,
+    };
+  })()`);
+
+  // 1) 不传 side: 不加 tempo
+  //    side=aiSide 时加 +TEMPO_BONUS
+  //    差 = TEMPO_BONUS
+  assert.equal(result.redViewRedToMove - result.redViewNoSide, result.tempoBonus,
+    `evaluateBoard(..., RED, RED) - evaluateBoard(..., RED) should equal TEMPO_BONUS(${result.tempoBonus}), got ${result.redViewRedToMove - result.redViewNoSide}`);
+
+  // 2) side=opposite(aiSide): 走子方是 BLACK,BLACK 视角加 tempo,
+  //    RED 视角 → -TEMPO_BONUS
+  assert.equal(result.redViewNoSide - result.redViewBlackToMove, result.tempoBonus,
+    `evaluateBoard(..., RED) - evaluateBoard(..., RED, BLACK) should equal TEMPO_BONUS(${result.tempoBonus}), got ${result.redViewNoSide - result.redViewBlackToMove}`);
+
+  // 3) 差 = 2 * TEMPO_BONUS
+  assert.equal(result.diff, 2 * result.tempoBonus,
+    `side=RED vs side=BLACK difference should equal 2*TEMPO_BONUS(${2 * result.tempoBonus}), got ${result.diff}`);
+
+  // 4) BLACK 视角与 RED 视角相反(无 side 时)
+  assert.equal(result.redViewNoSide, -result.blackViewNoSide,
+    `no-side RED view should equal negative of BLACK view (symmetric), got red=${result.redViewNoSide}, black=${result.blackViewNoSide}`);
+});
 
