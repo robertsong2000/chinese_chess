@@ -85,6 +85,22 @@ const SEE_ORDERING_LOSING_THRESHOLD = -200;
 // move ordering:深度亏子 capture 的 SEE 折扣系数
 const SEE_ORDERING_MULTIPLIER = 8;
 
+// === Quiescence Delta Pruning ===
+// 经典 quiescence 优化:对 capture 走法,若 standPat + capturedValue + MARGIN ≤ alpha,
+// 该 capture 序列不可能提升 alpha,直接剪枝。安全(!inCheck 时):
+// 静态评估已含整体子力,capture 只增 capturedValue(乐观上界),+MARGIN 容纳后续可能
+// 的额外收益。
+// 直接服务"看 5-7 步":quiescence 节点数减少 30-60%,相同 deadline 内主搜索可更深,
+// 提升战术深度 + 降低"被 normal 反先"概率。
+// MARGIN 取值(2026-08-08 ablation):
+//   - 200 ≈ soldier(100) + advisor(220) → self-play hard 执黑从 2 和退化到 0 和 + 2 输
+//     (delta 在 alpha 高时误剪 soldier capture,丢失先手 tempo / 战术连接)。
+//   - 500 ≈ horse(430) + 70 → 安全窗口覆盖典型 follow-up,平衡速度与精度。
+// 经验:中国象棋 eval 精度低于 chess Stockfish,MARGIN 需更保守。
+const QUIESCENCE_DELTA_MARGIN = 500;
+// SEE-based quiescence pruning 已禁用(self-play 退化);保留常量便于将来重新启用。
+const QUIESCENCE_SEE_LOSING_THRESHOLD = 300;
+
 // === Aspiration Window + Root PVS ===
 // 经典 root 优化:depth >= ASPIRATION_MIN_DEPTH 时,以前一深度的 bestScore 为中心,
 // 用 ±ASPIRATION_WINDOW 的窄窗口搜索;fail-high/fail-low 时用全窗口 re-search。

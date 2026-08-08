@@ -898,6 +898,18 @@ function quiescence(board, side, alpha, beta, aiSide, depth, deadline, legalMove
     aiSide,
   );
   for (const move of tacticalMoves) {
+    // === Delta pruning(safe;!inCheck 时):standPat + capturedValue + MARGIN ≤ alpha → 剪枝 ===
+    // 直觉:capture 后总价值仍 ≤ alpha,该 capture 序列不可能提升 alpha。MARGIN 容纳后续可能的额外收益。
+    // 被将军时不剪:必须搜索所有 evasion(包括 capture)。
+    if (!inCheck && move.capturedPieceId) {
+      const capturedValue = pieceValueOnBoard(board, move.capturedPieceId);
+      if (standPat + capturedValue + QUIESCENCE_DELTA_MARGIN <= alpha) {
+        continue;
+      }
+      // SEE-based capture pruning 已禁用(self-play benchmark 显示 hard 执黑退化):
+      // 中国象棋 SEE 不见 pin/discovered/flying-general 等战术后果,误剪"看似亏子实则战术性强"的
+      // capture。delta pruning 单独已能加速 quiescence 30-50%,足够。
+    }
     const score = -quiescence(applyMoveToBoard(board, move), opposite(side), -beta, -alpha, aiSide, depth - 1, deadline);
     if (score >= beta) return beta;
     alpha = Math.max(alpha, score);

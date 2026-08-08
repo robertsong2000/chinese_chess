@@ -115,6 +115,58 @@ test("quiescence searches legal evasions instead of standing pat while in check"
   assert.notEqual(result.score, 100);
 });
 
+test("quiescence delta-prunes captures that cannot raise alpha when not in check", () => {
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    let recursed = 0;
+    let seeCalls = 0;
+    // standPat = 100(己方视角);alpha = 5000(已远高于 standPat + soldier(100) + margin(200) = 400)
+    evaluateBoard = () => 100;
+    isInCheck = () => false;
+    allLegalMoves = () => [
+      { pieceId: "rc", side: SIDES.RED, fromX: 0, fromY: 0, toX: 0, toY: 3, capturedPieceId: "bs" },
+    ];
+    orderMoves = (_board, moves) => moves;
+    applyMoveToBoard = () => { recursed += 1; return {}; };
+    pieceValueOnBoard = () => 100; // soldier capture
+    see = () => { seeCalls += 1; return 100; };
+
+    const score = quiescence({}, SIDES.RED, 5000, 9000, SIDES.RED, 2, Infinity);
+    return { score, recursed, seeCalls };
+  })()`);
+
+  // standPat(100) + soldier(100) + margin(200) = 400 ≤ alpha(5000) → delta-pruned, no recursion
+  assert.equal(result.recursed, 0);
+  // SEE check 不需要触发(delta 已先剪)
+  assert.equal(result.seeCalls, 0);
+  // 未进 beta cutoff 时返回当前 alpha(5000)
+  assert.equal(result.score, 5000);
+});
+
+test("quiescence searches captures that can raise alpha despite margin", () => {
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    let recursed = 0;
+    // standPat = 100;alpha = 200 → standPat + chariot(900) + margin(200) = 1200 > alpha → 不剪
+    evaluateBoard = () => 100;
+    isInCheck = () => false;
+    allLegalMoves = () => [
+      { pieceId: "rc", side: SIDES.RED, fromX: 0, fromY: 0, toX: 0, toY: 3, capturedPieceId: "bc" },
+    ];
+    orderMoves = (_board, moves) => moves;
+    applyMoveToBoard = () => { recursed += 1; return { terminal: true }; };
+    pieceValueOnBoard = () => 900; // chariot capture
+    see = () => 900;
+
+    // depth=0 时,quiescence 直接返回 standPat(不进 capture loop)
+    quiescence({ terminal: true }, SIDES.RED, 200, 9000, SIDES.RED, 2, Infinity);
+    return { recursed };
+  })()`);
+
+  // depth=2 且 capture 不能 delta-prune(1200 > 200)→ 至少递归一次
+  assert.ok(result.recursed >= 1, `expected recursion when capture can raise alpha, got ${result.recursed}`);
+});
+
 // 子任务 B1:state 依赖参数化(为 Web Worker 抽取做前置)
 // 验证 capturedValue / positionRepetitionCount / rootCyclePenalty / preferNonRepeatingMoves
 // 在显式传入与默认 state 等价的参数时,行为完全一致。
