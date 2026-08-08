@@ -64,6 +64,17 @@ const LMR_REDUCTION = 1;
 const NULL_MOVE_MIN_DEPTH = 3;
 const NULL_MOVE_REDUCTION = 2;
 
+// === Check Extension ===
+// 经典选择性延伸:走法给对手造成将军时,该线深度 +1 ply。
+// 直接服务行为目标:1) 完全不送子(被将军时多看一步能识别陷阱反将);
+// 2) 看 5-7 步(关键时刻深度突破)。将军的合法回应有限,延伸不会爆炸。
+const CHECK_EXTENSION_PLY = 1;
+// 单条搜索线最多累加 N 次 check extension,防止循环将军导致搜索树无限膨胀
+const MAX_CHECK_EXTENSIONS_PER_LINE = 2;
+// 仅在 depth >= N 的节点做 check extension。浅节点(depth=1 即将进 quiescence)做 extension
+// 收益小但每个 move 多一次 O(N) isInCheck 调用,会让搜索树膨胀严重。设 N=2 平衡精度与性能。
+const CHECK_EXTENSION_MIN_DEPTH = 2;
+
 // === SEE (Static Exchange Evaluation) ===
 // 静态交换评估:对 capture 走法,精确计算 capture sequence 的净交换价值。
 // 直接服务"完全不送子"目标:识别"会被反吃"的亏子捕获,在 move ordering 中合理处理。

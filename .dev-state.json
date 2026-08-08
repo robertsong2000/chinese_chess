@@ -32,7 +32,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 3,
+  "current_phase": 4,
   "phases": [
     {
       "id": 1,
@@ -61,6 +61,13 @@
       "todo_count": 7,
       "priority": "P1",
       "rationale": "质量门槛"
+    },
+    {
+      "id": 4,
+      "name": "棋力深度冲刺(冲击一级棋士 2200)",
+      "todo_count": 7,
+      "priority": "P0",
+      "rationale": "Phase 1/1.5 已建立完整 AI 引擎基础,本阶段做经典深度优化(check/aspiration/futility/IID)+ 战术/残局识别,把棋力推到一级棋士"
     }
   ],
   "todos": [
@@ -522,6 +529,111 @@
       "attempts": 1,
       "completed_at": "2026-08-08T11:02:24.269521+08:00",
       "commit_sha": "f0ea7bd"
+    },
+    {
+      "id": 29,
+      "phase": 4,
+      "category": "棋力-搜索-延伸",
+      "title": "Check Extension(被将军时延伸 +1 ply)",
+      "description": "在 negamax 中,当走法给对手造成将军时,该走法的子搜索深度 +1 ply(check extension)。限制每条搜索线最多 2 个 extension 防爆炸。直接服务两个行为目标:1)'完全不送子'(被将军时多看一步能识别陷阱);2)'看 5-7 步'(关键时刻深度突破)。验收:npm test 通过 + 加 1 个回归测试验证被将军局面下搜索更深。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 20,
+      "attempts": 0
+    },
+    {
+      "id": 30,
+      "phase": 4,
+      "category": "棋力-搜索-窗口",
+      "title": "Aspiration Window + Root PVS",
+      "description": "在 root 搜索中,depth>=3 起用前一个深度的 bestScore 作中心,aspiration window = ±80;root loop 用 PVS(首走法 full window,其余 zero-window)。fail-high/fail-low 时用全窗口 re-search。验收:npm test 通过 + hard 模式深度提升。",
+      "files": [
+        "src/constants.js",
+        "src/search.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0
+    },
+    {
+      "id": 31,
+      "phase": 4,
+      "category": "棋力-搜索-pruning",
+      "title": "Futility Pruning + Razoring(浅层 prune)",
+      "description": "depth<=3 时,如果 standPat + margin < alpha 且走法非吃子/非将军,直接 prune。razoring:depth=1 + score+margin<alpha 时降到 quiescence。验收:npm test 通过 + 节点数下降 20%+。",
+      "files": [
+        "src/constants.js",
+        "src/search.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0
+    },
+    {
+      "id": 32,
+      "phase": 4,
+      "category": "棋力-搜索-IID",
+      "title": "Internal Iterative Deepening(无 TT move 时预探查)",
+      "description": "在 negamax 中,如果 TT 无 best move 且 depth>=3,先做 depth-2 搜索拿 best move 作排序提示。避免在大局面下走法排序失效。验收:npm test 通过。",
+      "files": [
+        "src/search.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 20,
+      "attempts": 0
+    },
+    {
+      "id": 33,
+      "phase": 4,
+      "category": "棋力-评估-战术",
+      "title": "战术模式检测(pin/fork/discovered attack)",
+      "description": "在 evaluateBoard 中加战术检测:1)pin(被钉住的子不能动,扣对方 mobility);2)fork(马/车同时攻击 2+ 高价值子);3)discovered attack(移动后暴露另一子攻击)。每种战术加 30-80 分。验收:npm test 通过 + 1 个战术局面测试。",
+      "files": [
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0
+    },
+    {
+      "id": 34,
+      "phase": 4,
+      "category": "棋力-残局",
+      "title": "实用残局模式识别(车对单车 / 车炮对单车 必胜)",
+      "description": "识别 4-6 种常见必胜残局模式(车胜单车、车炮胜单车、马兵胜单士等),给强方大幅加分(+500)鼓励换子进入必胜局面。验收:npm test 通过 + 1 个残局局面测试。",
+      "files": [
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0
+    },
+    {
+      "id": 35,
+      "phase": 4,
+      "category": "棋力-验证",
+      "title": "扩展 benchmark:tactics 测试集 + 自对弈 8 局",
+      "description": "tests/ai-benchmark.js 加 5 个经典战术题(必胜陷阱、防守关键局面),验证 hard 模式能正确解答。再加 hard 自对弈 8 局(原本 4 局),统计胜率。结果写到 docs/plans/benchmark-results.md。验收:npm test 通过 + tactics 通过率 >= 60%。",
+      "files": [
+        "tests/ai-benchmark.js",
+        "docs/plans/benchmark-results.md"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0
     }
   ],
   "history": [
@@ -763,5 +875,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "下次运行应做 id=20 加 Issue 模板(.github/ISSUE_TEMPLATE/bug.md + feature.md + .github/PULL_REQUEST_TEMPLATE.md)。预估 15 分钟。后续 phase 3 待办:#21 docker-compose healthcheck、#22 更新 PRD 反映现状。"
+  "next_run_hint": "下次运行应做 id=29 Check Extension(被将军时延伸 +1 ply)。预估 20 分钟。后续 phase 4 待办:#30 Aspiration Window、#31 Futility Pruning、#32 IID、#33 战术检测、#34 实用残局、#35 tactics benchmark。"
 }

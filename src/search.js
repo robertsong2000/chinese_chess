@@ -604,7 +604,7 @@ function ttStore(tt, hash, depth, score, flag, bestMoveKey) {
   tt.set(hash, { depth, score, flag, bestMoveKey });
 }
 
-function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = Infinity, ply = 0, killers = null, history = null, allowNull = true) {
+function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = Infinity, ply = 0, killers = null, history = null, allowNull = true, extensionsInLine = 0) {
   if (performance.now() > deadline) return evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
   const inCheck = isInCheck(board, side);
   const hash = tt ? computeZobrist(board, side) : 0;
@@ -648,17 +648,27 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     let score;
     const isTactical = Boolean(move.capturedPieceId);
     const childBoard = applyMoveToBoard(board, move);
+    // Check extension:走法给对手造成将军时,该线深度 +1 ply(每条搜索线最多累加 MAX 次)。
+    // 将军回应有限,延伸不会让搜索树爆炸,但能让 AI 多看一步反将陷阱 → 直接服务"完全不送子"。
+    // 仅在 depth >= MIN 时做:浅节点 extension 价值低,但每个 move 多一次 isInCheck 调用,
+    // 在 hard 深度搜索中会显著拖慢(走法数^depth 次额外 O(N) 调用)。
+    const givesCheck = depth >= CHECK_EXTENSION_MIN_DEPTH
+      && extensionsInLine < MAX_CHECK_EXTENSIONS_PER_LINE
+      && isInCheck(childBoard, opposite(side));
+    const extDepth = givesCheck ? depth - 1 + CHECK_EXTENSION_PLY : depth - 1;
+    const childExt = givesCheck ? extensionsInLine + 1 : extensionsInLine;
     if (i === 0) {
-      score = -negamax(childBoard, opposite(side), depth - 1, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
+      score = -negamax(childBoard, opposite(side), extDepth, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt);
     } else {
-      const canLMR = canReduce && i >= LMR_FULL_MOVE_COUNT && !isTactical;
-      const probeDepth = canLMR ? depth - 1 - LMR_REDUCTION : depth - 1;
-      score = -negamax(childBoard, opposite(side), probeDepth, -alpha - 1, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
+      // 给将军的走法不 LMR(它是战术性强走,降深度会丢失关键变化)
+      const canLMR = canReduce && i >= LMR_FULL_MOVE_COUNT && !isTactical && !givesCheck;
+      const probeDepth = canLMR ? depth - 1 - LMR_REDUCTION : extDepth;
+      score = -negamax(childBoard, opposite(side), probeDepth, -alpha - 1, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt);
       if (canLMR && score > alpha) {
-        score = -negamax(childBoard, opposite(side), depth - 1, -alpha - 1, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
+        score = -negamax(childBoard, opposite(side), extDepth, -alpha - 1, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt);
       }
       if (score > alpha && score < beta) {
-        score = -negamax(childBoard, opposite(side), depth - 1, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true);
+        score = -negamax(childBoard, opposite(side), extDepth, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt);
       }
     }
     if (score > best) {

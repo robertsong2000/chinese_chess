@@ -259,3 +259,54 @@ test("SEE handles chained captures correctly", () => {
   // 实际行为:Red 兵 A 吃 Black 兵 X,Black 选 stop(因 continue 后 Red 反吃均势,Black 无收益)。Red 净 +100。
   assert.equal(result, 100);
 });
+
+test("check extension constants are configured for tactical depth burst", () => {
+  // 契约:CHECK_EXTENSION_PLY = 1(单次延伸 1 ply,平衡精度与爆炸风险),
+  // MAX_CHECK_EXTENSIONS_PER_LINE = 2(限制单条搜索线最多累加 2 次延伸,防循环将军导致搜索树膨胀),
+  // CHECK_EXTENSION_MIN_DEPTH = 2(浅节点不做,避免 isInCheck 在大搜索树中放大成性能瓶颈)。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    ply: CHECK_EXTENSION_PLY,
+    max: MAX_CHECK_EXTENSIONS_PER_LINE,
+    minDepth: CHECK_EXTENSION_MIN_DEPTH,
+  }))()`);
+  assert.equal(result.ply, 1, "CHECK_EXTENSION_PLY should be 1");
+  assert.equal(result.max, 2, "MAX_CHECK_EXTENSIONS_PER_LINE should be 2");
+  assert.equal(result.minDepth, 2, "CHECK_EXTENSION_MIN_DEPTH should be 2");
+});
+
+test("check extension: AI prioritizes capturing the checker when in check", () => {
+  // 战术局面:黑将被红车直线将军(black 将 (4,1) 与 red 车 (4,5) 同列直线)。
+  // black 有两种化解:1) 马 (5,3)→(4,5) 吃车(马走日,马腿 (5,4) 空);
+  //                  2) 将 (4,1)→(3,1) 或 (5,1) 逃。
+  // 关键:将逃走法后,red 车跟到 (3,5)/(5,5) 将军,black 因 flying general 与 9 宫边界无解 → 2 步 mate。
+  // normal 模式 base depth=2 看不到 3-ply mate;check extension 让 black 子搜索 +1 ply,
+  // 正好看穿将逃陷阱,从而选吃车(净赢 +430 + 不再被将军)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 1, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 4, y: 5, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 5, y: 3, alive: true },
+    ];
+    state = createGame(SIDES.RED, "normal");
+    state.status = "playing";
+    state.currentSide = SIDES.BLACK;
+    state.board = board;
+    state.snapshots = [];
+    state.moveHistory = [];
+    const move = chooseAIMove();
+    return {
+      ateChariot: Boolean(move && move.pieceId === 'bh' && move.toX === 4 && move.toY === 5),
+      pieceId: move && move.pieceId,
+      toX: move && move.toX,
+      toY: move && move.toY,
+    };
+  })()`);
+  assert.equal(
+    result.ateChariot,
+    true,
+    `black horse should capture the checking chariot at (4,5); got piece=${result.pieceId} to=(${result.toX},${result.toY})`,
+  );
+});
