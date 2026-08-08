@@ -549,6 +549,14 @@ const PINNED_MOBILITY_PENALTY = {
   multiplier: 1.0, // 1.0 = 完全归零;0 = 关闭;不允许 < 0
 };
 
+// #61 Connected Chariots(双车联动)tactical eval:同方任意两车同列或同行且
+// 中间无子时,每对车 +CONNECTED_CHARIOTS_BONUS。经典『双车错』杀法 + 车十字
+// 攻击结构基础。两车联动可同时威胁多列/多行,形成连续将杀威胁。
+// 取值保守(参考子力:单车 900 / 兵 100),每对 30 远低于丢兵代价,避免
+// 鼓励"为联动而保留两车不兑"。对称不变量:初始局面红两车同行(y=9)中间
+// 无子 → 红 +30;黑两车同行(y=0)中间无子 → 黑 +30;双向相减 = 0。
+const CONNECTED_CHARIOTS_BONUS = 30;
+
 const POSITION_BONUS = {
   general: [
     [0, 0, 0, 8, 12, 8, 0, 0, 0],

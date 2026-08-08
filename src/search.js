@@ -1298,6 +1298,9 @@ function evaluateBoard(board, aiSide, side = null) {
   // #55 Horse Leg Penalty:马腿被堵的马减分(降低被困马估值)
   score += horseLegPenalty(board, aiSide);
   score -= horseLegPenalty(board, opposite(aiSide));
+  // #61 Connected Chariots(双车联动):同方两车同列/行 + 中间无子 → 加分
+  score += chariotCoordinationBonus(board, aiSide);
+  score -= chariotCoordinationBonus(board, opposite(aiSide));
   // #51 残局双兵过河协同(必胜结构):仅 endgame 阶段加分
   if (endgame) {
     score += endgameSoldierCoordinationBonus(board, aiSide);
@@ -1824,6 +1827,62 @@ function horseLegPenalty(board, side) {
     }
   }
   return -penalty;
+}
+
+// #61 Connected Chariots(双车联动)eval:side 方任意两车同列或同行 + 中间无子时,
+// 每对车 +CONNECTED_CHARIOTS_BONUS。经典『双车错』杀法基础结构 + 车十字攻击。
+// 实现要点:
+//   - 同列:两车 x 相同,扫描它们 y 之间是否有任意其他棋子(友方/敌方)。
+//   - 同行:两车 y 相同,扫描它们 x 之间是否有任意其他棋子。
+//   - 中间有子 = 不联通(车被自家子/敌方子挡住,联动失效)→ 不加分。
+//   - 不限过河/开局(联动在中局/残局均有价值,且初始局面已对称触发,双向相减 = 0)。
+// 复杂度:O(N²) over livePieces(N≤32),实际仅对 side 方的 ≤2 车生效(1 对),
+// 最坏 1 次配对 + 1 次 livePieces 扫描 = O(N),可忽略。
+// 返回 side 方总加分;evaluateBoard 双向相减。
+function chariotCoordinationBonus(board, side) {
+  if (!CONNECTED_CHARIOTS_BONUS) return 0;
+  const chariots = [];
+  for (const p of livePieces(board)) {
+    if (p.side !== side || p.type !== TYPES.CHARIOT) continue;
+    chariots.push(p);
+  }
+  if (chariots.length < 2) return 0;
+  const allPieces = livePieces(board);
+  let bonus = 0;
+  for (let i = 0; i < chariots.length; i += 1) {
+    for (let j = i + 1; j < chariots.length; j += 1) {
+      const a = chariots[i];
+      const b = chariots[j];
+      let connected = false;
+      if (a.x === b.x) {
+        const lo = Math.min(a.y, b.y);
+        const hi = Math.max(a.y, b.y);
+        let blocked = false;
+        for (const p of allPieces) {
+          if (p.id === a.id || p.id === b.id) continue;
+          if (p.x === a.x && p.y > lo && p.y < hi) {
+            blocked = true;
+            break;
+          }
+        }
+        connected = !blocked;
+      } else if (a.y === b.y) {
+        const lo = Math.min(a.x, b.x);
+        const hi = Math.max(a.x, b.x);
+        let blocked = false;
+        for (const p of allPieces) {
+          if (p.id === a.id || p.id === b.id) continue;
+          if (p.y === a.y && p.x > lo && p.x < hi) {
+            blocked = true;
+            break;
+          }
+        }
+        connected = !blocked;
+      }
+      if (connected) bonus += CONNECTED_CHARIOTS_BONUS;
+    }
+  }
+  return bonus;
 }
 
 // #58 Center Cannon Opening Bonus:开局阶段 side 方有炮在中线原位行时加分。

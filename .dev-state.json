@@ -32,7 +32,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 12,
+  "current_phase": 13,
   "phases": [
     {
       "id": 1,
@@ -134,6 +134,13 @@
       "todo_count": 4,
       "priority": "P0",
       "rationale": "Phase 7-11 完成 quiescence/TT/马腿/叠炮,但 evaluateBoard 仍是纯静态对称评估,缺经典评估精化项。本阶段补 tempo(走子方加分,直接对应先手优势)+ 开局中炮(开局阶段最重要的战术结构)+ pinned mobility(让 pin 战术在估值层面进一步精确),稳定一级棋士水平。"
+    },
+    {
+      "id": 13,
+      "name": "评估精化 V9(Connected Chariots + Phase 13 self-play 防退化,稳定一级棋士 2200)",
+      "todo_count": 3,
+      "priority": "P0",
+      "rationale": "Phase 12 完成 tempo + 中炮 + pinned mobility,但车类协同缺失。本阶段补『双车联动』(经典『双车错』杀法基础)+ 静态送子检测(补强 quiescence SEE 在非 capture 序列上的盲区)+ Phase 13 self-play 防退化回归测试,稳定 2200。"
     }
   ],
   "todos": [
@@ -1161,6 +1168,47 @@
       ],
       "completed_at": "2026-08-09T06:51:35.862220+08:00",
       "commit_sha": "3b9135cc180c06af8c1904570994fc9683ae8cdd"
+    },
+    {
+      "id": 61,
+      "phase": 13,
+      "title": "Connected Chariots (双车联动) tactical eval",
+      "description": "在 evaluateBoard 加 chariotCoordinationBonus(board, side):side 方任意两车同列或同行且中间无子时 +CONNECTED_CHARIOTS_BONUS。经典『双车错』杀法 +『车十字』攻击结构基础。constants.js 加 CONNECTED_CHARIOTS_BONUS=30(保守值,远小于单车 900)。对称不变量:初始局面两车均在 y=9/y=0 同行但中间无子 → 红+30、黑+30 双向相减 = 0。直接服务『中局战术组合能力』。",
+      "files": [
+        "src/constants.js",
+        "src/search.js"
+      ],
+      "estimated_min": 18,
+      "priority": "P0",
+      "status": "in_progress",
+      "attempts": 0
+    },
+    {
+      "id": 62,
+      "phase": 13,
+      "title": "Hanging piece static penalty (静态送子检测,补强 quiescence 非捕获序列盲区)",
+      "description": "在 evaluateBoard 加 hangingPiecePenalty(board, side):side 方任一非将子被敌方 ≤ 自身价值子攻击且无友方 ≤ 攻击方价值的防守者时,扣 ~25% 自身价值(上限)。直接服务『完全不送子』。保守取值,确保 self-play 不退化。",
+      "files": [
+        "src/constants.js",
+        "src/search.js"
+      ],
+      "estimated_min": 22,
+      "priority": "P0",
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "id": 63,
+      "phase": 13,
+      "title": "Self-play 退化回归测试(Phase 13:hard vs normal 4 局)",
+      "description": "tests/ai-search.test.js 加 4-局 self-play:hard 应至少 3 胜 1 平 vs normal,验证 Phase 13 eval 精化未退化。复用 #60 测试结构。",
+      "files": [
+        "tests/ai-search.test.js"
+      ],
+      "estimated_min": 12,
+      "priority": "P0",
+      "status": "pending",
+      "attempts": 0
     }
   ],
   "history": [
@@ -1641,5 +1689,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 12 全部完成(4/4)。下次:进入 Phase 13 或围绕\"二级-一级棋士\"目标生成新 TODO(例:TT depth-preferred replacement 升级、LMR late-move reduction、SMP 搜索、更多残局 tablebase)"
+  "next_run_hint": "Phase 13 启动:本次完成 TODO #61 (Connected Chariots eval)。下次:#62 Hanging piece static penalty,然后 #63 Phase 13 self-play 回归测试。"
 }
