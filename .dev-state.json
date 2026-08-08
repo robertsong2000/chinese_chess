@@ -106,7 +106,7 @@
     {
       "id": 9,
       "name": "棋力深度冲刺 V5(Verified NMP + 评估残局精化,稳定一级棋士 2200)",
-      "todo_count": 1,
+      "todo_count": 2,
       "priority": "P0",
       "rationale": "Phase 1-8 经典启发式全完成(开局库 + LMR + NMP + Killer + History + TT + SEE + Futility + Razoring + LMP + IID + PVS + Quiescence Delta + Check Extension + Countermove + Singular Extension)。本阶段加 Verified NMP(null move cutoff 用 reduced real search 复核,防止残局 zugzwang 与战术误判),目标 hard 在 self-play 中对 normal 形成稳定 65%+ 胜率。",
       "status": "active"
@@ -902,6 +902,25 @@
       "completed_at": "2026-08-09T00:22:23+08:00",
       "commit_sha": "24fff88",
       "full_commit_sha": "24fff882259782040a6195be931d30c5ae5456e2"
+    },
+    {
+      "id": 48,
+      "phase": 9,
+      "title": "Threat Extension(null move fail-low 时首走法 +1 ply)",
+      "description": "经典 Stockfish 选择性延伸:null move search 返回 nullScore < beta - MARGIN 时,说明对手有真实威胁 — 即使让一步,对手仍能把分数压到 beta 之下。主搜索首走法(走法排序后通常是最优的 TT/killer)给 +1 ply extension,帮助找到防御性走法。实现:constants.js 加 THREAT_EXTENSION_ENABLED/MIN_DEPTH=5/MARGIN=100/PLY=1/MAX_PER_LINE=1;search.js negamax 在 null move block 内捕获 nullScore 设 underThreat,move loop i==0 时 +1 ply。与 check/singular ext 共享 extensionsInLine 计数器(总延伸上限 2+1+1=4)。与 Verified NMP #47 协调:verify 通过直接 return,不进 threat ext 检测;verify 失败 fall-through 时nullScore 仍 >= beta 不满足 < beta - MARGIN,threat ext 不触发。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ],
+      "priority": "P0",
+      "estimated_min": 25,
+      "status": "done",
+      "completed_at": "2026-08-09T00:47:24.125258+08:00",
+      "commit_sha": "5f85427",
+      "full_commit_sha": "5f85427c49f10ad2cd6035eb384db37f133911a7",
+      "attempts": 1,
+      "notes": "实现完成。54/54 测试通过(原 52 + 2 新增:常量契约 + 多子压境下吃车战术)。Threat ext 与 #47 Verified NMP 在 null move block 内协调:verify 通过 → return;verify 失败 → nullScore 仍 >= beta → threat ext 不触发(语义一致);nullScore < beta - 100 → threat ext 触发,首走法 +1 ply。"
     }
   ],
   "history": [
@@ -1275,6 +1294,14 @@
       "summary": "#47 Verified NMP:nullScore>=beta + depth>=5 时用 reduced real search(depth-1-1,zero-window)复核,verifyScore>=beta 才确认 cutoff。防残局 zugzwang + hidden tactical refutation。verify 内部 depth=depth-2 < VERIFY_MIN=5 防递归。2 个新测试(常量+递归安全 / endgame 战术局面),52/52 pass。Self-play 2 局 hardWinRate=0.5(hard 执红胜 / hard 执黑输),与 baseline 一致无退化。",
       "commit_sha": "24fff88",
       "full_commit_sha": "24fff882259782040a6195be931d30c5ae5456e2"
+    },
+    {
+      "timestamp": "2026-08-09T00:47:24.125258+08:00",
+      "todo_id": 48,
+      "action": "completed",
+      "summary": "#48 Threat Extension:null move fail-low(nullScore<beta-100)时,主搜索首走法(TT/killer) +1 ply extension。constants 加 5 个 THREAT_EXTENSION_* 常量;search.js negamax 加 underThreat flag + move loop i==0 +1 ply 路径。与 check/singular ext 共享 extensionsInLine(总上限 4)。与 Verified NMP #47 协调:verify 通过 → return;verify 失败 → nullScore>=beta 不触发 threat ext;nullScore<beta-100 → threat ext 触发。54/54 测试通过(原 52 + 2 新增:常量契约 + 多子压境下吃车战术)。",
+      "commit_sha": "5f85427",
+      "full_commit_sha": "5f85427c49f10ad2cd6035eb384db37f133911a7"
     }
   ],
   "rules": [
@@ -1286,5 +1313,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 9 启动,#47 Verified NMP 完成。建议下一步:1) 跑长 benchmark (BENCH_LONG=1, 20 局) 验证 #47 真实效果(endgame 阶段胜率是否提升);2) 生成 Phase 9 续 TODO,候选:Threat Extension (基于对手威胁的延伸) / Aspiration Window 重新启用(更宽 ±300 + 严格 re-search,验证之前 #37 退化定位是否仍成立) / King Attack Zone eval(评估对方将的安全 + 攻击方多子聚集宫 bonus) / TT move depth-preferred probe ordering(改进 TT 命中时的 ordering);3) 优先 Threat Extension — 经典 Stockfish 技术,当 null move 失败时(nullScore<beta-某阈值),说明对手有威胁,该对手威胁走法可获 +1 ply extension,直接服务\"看 5-7 步\"。"
+  "next_run_hint": "Phase 9 #48 Threat Extension 完成。建议下一步:1) 跑长 benchmark (BENCH_LONG=1, 20 局) 验证 #48 真实效果(threat ext 在压力局是否提升 hardWinRate / 减少送子);2) 生成 Phase 9 续 TODO,候选:King Attack Zone eval(评估对方将的安全 + 攻击方多子聚集宫 bonus,直接服务『完全不送子』和『中局战术组合能力』) / TT move depth-preferred probe ordering(改进 TT 命中时的 ordering 走法探测) / Aspiration Window 重新启用(更宽 ±300 + 严格 re-search,验证之前 #37 退化定位是否仍成立) / Razoring 重新启用(在评估函数精度提升后,可重新尝试,严格条件 + 大 MARGIN);3) 优先 King Attack Zone eval — 直接服务『完全不送子』『中局战术组合能力』两个目标。"
 }
