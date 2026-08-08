@@ -1892,3 +1892,92 @@ test("#55 horseLegPenalty: trapped horse (legs blocked) gets penalty, free horse
     `black side with no horses should give 0, got ${result.blackFreePenalty}`);
 });
 
+test("#56 cannonBattery constants are configured for stacked-cannon tactic detection", () => {
+  // 契约:TACTIC_BONUS.cannonBattery 必须存在且为保守正数(参考同档 cannonPin=30、fork=60)。
+  // 直接服务"中局战术组合能力":叠炮是中国象棋经典战术,底层炮被解架后上层炮立即补上。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    exists: typeof TACTIC_BONUS === 'object' && TACTIC_BONUS !== null,
+    hasBattery: 'cannonBattery' in TACTIC_BONUS,
+    battery: TACTIC_BONUS.cannonBattery,
+    batteryType: typeof TACTIC_BONUS.cannonBattery,
+  }))()`);
+  assert.ok(result.exists, 'TACTIC_BONUS constant must be defined');
+  assert.ok(result.hasBattery, 'TACTIC_BONUS.cannonBattery must be defined (Phase 11 #56)');
+  assert.equal(result.batteryType, 'number',
+    `cannonBattery must be a number, got ${result.batteryType}`);
+  assert.ok(result.battery > 0 && result.battery <= 60,
+    `cannonBattery should be conservative (0 < v <= 60, near cannonPin=30), got ${result.battery}`);
+});
+
+test("#56 cannonBattery: stacked cannons (same column, aligned target) trigger bonus; no target = 0", () => {
+  // 经典叠炮:同方两炮在同列(中间无第三方子),且方向轴上有敌方高价值目标对齐。
+  // 不触发情形:(a) 同列无目标;(b) 两炮间有第三方子阻断;(c) 同方但不同行不同列;
+  // (d) 单炮(不构成叠炮)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const base = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+    ];
+    // 1) 叠炮对齐敌方将:红炮 (4,5) + (4,6),方向延伸 → 黑将 (4,0)。
+    //    (4,6) 沿 -y 方向 → 跳过 (4,5) → 找到 (4,0) bg(将,高价值)。命中。
+    const stackedVsKing = [...base,
+      { id: 'rc1', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 5, alive: true },
+      { id: 'rc2', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 6, alive: true }];
+    // 2) 同列但无目标:红炮 (4,5) + (4,6),把黑将挪到 (3,0),同列无对齐目标
+    const stackedNoTarget = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 3, y: 0, alive: true },
+      { id: 'rc1', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 5, alive: true },
+      { id: 'rc2', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 6, alive: true }];
+    // 3) 同列但两炮间有第三方子:红炮 (4,5) + (4,7),中间 (4,6) 有红兵 → 不是叠炮
+    const stackedWithScreen = [...base,
+      { id: 'rc1', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 5, alive: true },
+      { id: 'rc2', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 7, alive: true },
+      { id: 'rs', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 6, alive: true }];
+    // 4) 同行叠炮对齐敌方车:红炮 (0,5) + (1,5),沿 +x 方向找到 (4,5) 黑车(高价值)
+    const stackedRowVsChariot = [...base,
+      { id: 'rc1', side: SIDES.RED, type: TYPES.CANNON, x: 0, y: 5, alive: true },
+      { id: 'rc2', side: SIDES.RED, type: TYPES.CANNON, x: 1, y: 5, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 4, y: 5, alive: true }];
+    // 5) 单炮对照:仅 1 个红炮,无论如何不构成叠炮
+    const singleCannon = [...base,
+      { id: 'rc1', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 5, alive: true }];
+    // 6) 不同行不同列:不可能对齐 → 0
+    const diagonal = [...base,
+      { id: 'rc1', side: SIDES.RED, type: TYPES.CANNON, x: 3, y: 5, alive: true },
+      { id: 'rc2', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 4, alive: true }];
+
+    return {
+      stackedVsKing: tacticBonus(stackedVsKing, SIDES.RED),
+      stackedNoTarget: tacticBonus(stackedNoTarget, SIDES.RED),
+      stackedWithScreen: tacticBonus(stackedWithScreen, SIDES.RED),
+      stackedRowVsChariot: tacticBonus(stackedRowVsChariot, SIDES.RED),
+      singleCannon: tacticBonus(singleCannon, SIDES.RED),
+      diagonal: tacticBonus(diagonal, SIDES.RED),
+      batteryValue: TACTIC_BONUS.cannonBattery,
+    };
+  })()`);
+
+  // 1) 叠炮对齐将:必须触发 cannonBattery(可能还叠加其他 tactic,但至少 >= battery)
+  assert.ok(result.stackedVsKing >= result.batteryValue,
+    `stacked cannons aligned with enemy general should give >= cannonBattery(${result.batteryValue}), got ${result.stackedVsKing}`);
+  // 2) 同列但无目标:不应该有 battery 加分(其他 tactic 也基本不触发)
+  assert.ok(result.stackedNoTarget < result.batteryValue,
+    `stacked cannons with no aligned target should NOT trigger cannonBattery(< ${result.batteryValue}), got ${result.stackedNoTarget}`);
+  // 3) 中间有第三方子:不是经典叠炮
+  assert.ok(result.stackedWithScreen < result.batteryValue,
+    `stacked cannons with screen between them should NOT trigger cannonBattery(< ${result.batteryValue}), got ${result.stackedWithScreen}`);
+  // 4) 同行叠炮对齐敌方车:必须触发(行/列对称)
+  assert.ok(result.stackedRowVsChariot >= result.batteryValue,
+    `stacked cannons on same row aligned with enemy chariot should give >= cannonBattery(${result.batteryValue}), got ${result.stackedRowVsChariot}`);
+  // 5) 单炮:不构成叠炮
+  assert.equal(result.singleCannon, 0,
+    `single cannon should give 0 battery bonus, got ${result.singleCannon}`);
+  // 6) 不同行不同列:0
+  assert.equal(result.diagonal, 0,
+    `non-aligned cannons should give 0, got ${result.diagonal}`);
+});
+
+

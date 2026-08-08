@@ -1436,6 +1436,91 @@ function tacticBonus(board, side) {
       }
     }
   }
+  // #56 Cannon Battery(叠炮):同方两炮在同列/同行,中间无第三方子(允许直接相邻),
+  // 且方向轴上有一个敌方高价值目标(将/车/马/炮)对齐 → 叠炮攻势。
+  // 限制:仅在存在真实威胁目标时给分,避免盲目叠加。每个 (pair,target) 只算一次,
+  // 通过已处理的 piece 集合 + 仅按 piece.id 升序去重,避免双向重复计数。
+  if (TACTIC_BONUS.cannonBattery) {
+    const myCannons = livePieces(board).filter(
+      (p) => p.alive && p.side === side && p.type === TYPES.CANNON
+    );
+    const seenPair = new Set();
+    for (let i = 0; i < myCannons.length; i += 1) {
+      const c1 = myCannons[i];
+      for (let j = i + 1; j < myCannons.length; j += 1) {
+        const c2 = myCannons[j];
+        if (c1.x !== c2.x && c1.y !== c2.y) continue; // 必须同行或同列
+        const pairKey = c1.id < c2.id ? `${c1.id}-${c2.id}` : `${c2.id}-${c1.id}`;
+        if (seenPair.has(pairKey)) continue;
+        // 检查两炮之间无第三方子(允许直接相邻 = 间隔 0 子)
+        const between = [];
+        if (c1.x === c2.x) {
+          const lo = Math.min(c1.y, c2.y) + 1;
+          const hi = Math.max(c1.y, c2.y);
+          for (let y = lo; y < hi; y += 1) {
+            const p = pieceAt(board, c1.x, y);
+            if (p) between.push(p);
+          }
+        } else {
+          const lo = Math.min(c1.x, c2.x) + 1;
+          const hi = Math.max(c1.x, c2.x);
+          for (let x = lo; x < hi; x += 1) {
+            const p = pieceAt(board, x, c1.y);
+            if (p) between.push(p);
+          }
+        }
+        if (between.length !== 0) continue; // 中间有子:不是经典叠炮
+        seenPair.add(pairKey);
+        // 沿同轴方向(两个方向)找一个敌方高价值目标:第一个非 c2 的子应是敌方高价值
+        // 选"远离另一炮"方向延伸(经典叠炮:上层炮 → 下层炮 → 炮架 → 目标)
+        const axis = c1.x === c2.x ? 'y' : 'x';
+        const coords = [c1[axis], c2[axis]];
+        // 选更靠边的炮作为延伸起点(沿同轴向外延伸找目标)
+        // 两炮可能 c1 在内 c2 在外,这里两个方向都试一次,任一方向命中即可
+        let foundTarget = false;
+        for (const outer of [c1, c2]) {
+          // outer 沿同轴"远离另一炮"的方向延伸,跳过另一炮,找第一个非自家炮的子
+          const other = outer === c1 ? c2 : c1;
+          const dir = other[axis] > outer[axis] ? -1 : 1;
+          let coord = outer[axis] + dir;
+          let skippedOther = false;
+          let target = null;
+          while (true) {
+            if (axis === 'y') {
+              if (coord < 0 || coord > 9) break;
+              const p = pieceAt(board, outer.x, coord);
+              if (p) {
+                if (!skippedOther && p.id === other.id) {
+                  skippedOther = true;
+                } else {
+                  target = p;
+                  break;
+                }
+              }
+            } else {
+              if (coord < 0 || coord > 8) break;
+              const p = pieceAt(board, coord, outer.y);
+              if (p) {
+                if (!skippedOther && p.id === other.id) {
+                  skippedOther = true;
+                } else {
+                  target = p;
+                  break;
+                }
+              }
+            }
+            coord += dir;
+          }
+          if (target && target.side === enemy
+            && (TACTIC_HIGH_VALUE_TYPES.indexOf(target.type) >= 0 || target.type === TYPES.GENERAL)) {
+            foundTarget = true;
+            break;
+          }
+        }
+        if (foundTarget) total += TACTIC_BONUS.cannonBattery;
+      }
+    }
+  }
   return total;
 }
 

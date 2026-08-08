@@ -464,6 +464,11 @@ const TACTIC_BONUS = {
   pinHighValue: 20, // pin 目标价值 >= 马(430)额外加分
   cannonPin: 30, // 炮类型 pin:对方子作炮架,移动炮架即丢
   discoveredAttack: 35, // 闪击:X 移开暴露 A(车)攻击 H(高价值)
+  // #56 Cannon Battery(叠炮):同方两炮在同列/同行(中间无第三方子,允许直接相邻或隔空),
+  // 经典中国象棋战术。底层炮的"架"被解掉后上层炮立刻补上,对手难以单纯通过移架破解。
+  // 取值 40:与 cannonPin 同档(同样是炮类战术),低于 fork(60)因 fork 直接威胁子力。
+  // 仅在两炮与一个高价值敌方目标(将/车/马/炮)对齐时触发,避免盲目叠加被误判为威胁。
+  cannonBattery: 40,
 };
 // fork / discovered 检测的"高价值子"类型(车/马/炮)
 const TACTIC_HIGH_VALUE_TYPES = ["chariot", "horse", "cannon"];
