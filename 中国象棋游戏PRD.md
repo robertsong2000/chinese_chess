@@ -19,6 +19,7 @@
 | 版本 | 日期 | 修订人 | 修订内容 |
 |------|------|--------|----------|
 | v1.0 | 2026-04-28 | - | 初始版本创建 |
+| v1.1 | 2026-08-08 | - | 加第 14 章「当前实现状态」,反映 Phase 1 / 1.5 / 2 / 3 完成情况、棋力估算与 TODO 链接;附录顺延为第 15 章 |
 
 ### 1.3 项目背景
 
@@ -581,9 +582,78 @@ flowchart LR
 
 ---
 
-## 14. 附录
+## 14. 当前实现状态
 
-### 14.1 术语表
+> 本章维护本 PRD 与代码现状的对齐关系。具体到提交粒度的演进见 [`CHANGELOG.md`](./CHANGELOG.md),待办列表见 `.dev-state.json`。
+
+### 14.1 实现概览
+
+| 项目 | 状态 |
+|------|------|
+| 规则覆盖 | 完整(32 子 / 蹩马腿 / 塞象眼 / 炮架 / 将帅照面 / 将军 / 将死 / 困毙) |
+| 三档难度 | easy / normal / hard |
+| 测试覆盖 | 15 个 node test 全过(规则、AI 行为、Worker smoke、参数化回归) |
+| 工程化 | README、LICENSE(MIT)、.gitignore、ESLint + Prettier、GitHub Actions CI、Issue / PR 模板、Docker Compose + healthcheck |
+| 代码组织 | `app.js` 已拆分为 `src/constants.js`(常量)+ `src/rules.js`(棋规)+ `src/search.js`(AI 搜索)+ `ai-worker.js`(Web Worker 骨架,默认禁用) |
+
+### 14.2 已完成特性(按阶段)
+
+**Phase 1 — 基础棋力(三级棋士基线,版本 0.2.0)**
+- 开局库 5 变着,前 5 步不再随机
+- 走法排序:Killer heuristic + History heuristic
+- 搜索剪枝:Late Move Reduction(LMR)+ Null move pruning
+- 评估函数细化:兵过河 +30、车马炮协同(攻击区 + 双子组合)、王的安全(飞行将军防守)
+- 残局阶段切换评估(鼓励兵升变、攻击区放大)
+- AI 棋力 benchmark:`hard` 4:0 `normal`(2 局 checkmate + 2 局 material_majority)
+
+**Phase 1.5 — 二级棋士 → 一级棋士冲刺(版本 0.3.0)**
+- Hash table / 置换表(Zobrist hashing + EXACT/LOWER/UPPER flag,容量 200k)
+- Principal Variation Search(PVS,与 LMR 集成的 zero-window 试探)
+- 时间管理(按走法数动态分配 + 稳定性早停 + 关键局面深度延伸)
+- 开局库扩展 5 → 22 变着,覆盖中炮 / 仙人指路 / 飞相 / 起马 / 过宫炮 / 仕角炮 / 五六炮 / 五七炮等主流布局,每变着 8 步(176 步全合法)
+- Web Worker 异步路径骨架(`chooseAIMoveAsync` + `runAISearch` 纯函数 + worker 失败 fallback 同步),`AI_WORKER_ENABLED` 默认 false
+
+**Phase 2 — 工程化 P0(版本 0.4.0)**
+- README、LICENSE、.gitignore、GitHub Actions CI(Node 20/22 矩阵 + benchmark smoke `continue-on-error`)
+
+**Phase 3 — 工程化 P1(版本 0.4.0+)**
+- ESLint + Prettier(recommended + 单引号 / 100 字符 / 无分号)
+- `app.js` 三步拆分(常量 / 棋规 / 搜索)
+- Issue 模板(bug / feature,PULL_REQUEST_TEMPLATE)
+- docker-compose healthcheck(wget --spider,30s / 3 retries)+ src/ 挂载 + 日志限制
+
+### 14.3 棋力估算
+
+| 难度 | 搜索深度 | 行为表现 | 估算区间 |
+|------|---------|---------|---------|
+| easy | 1 ply | 入门陪练,会主动让步 | 新手 |
+| normal | 2 ply + quiescence | 合法走子 + 基础战术,不会送大子 | 初学者 - 三级棋士下沿 |
+| hard | 5 ply + quiescence + LMR + Null move + TT + PVS + 时间管理 | 开局用库、中局战术组合、残局能赢必胜局面 | **三级棋士 - 二级棋士(Elo ~1700-1900)** |
+
+> Phase 1.5 完成后 `hard` 已覆盖「完全不送子 / 开局熟练 / 看 5-7 步 / 残局能赢」目标的大部分。要稳定到一级棋士(Elo 2000-2200),后续仍需:更细的评估权重调优、SEE(静态交换评估)替换 null move 的边界判断、以及更广的 benchmark 自对弈样本。
+
+### 14.4 待办路线
+
+详见 `.dev-state.json` 的 `todos` 数组。当前 Phase 1 / 1.5 / 2 / 3 全部完成,Phase 3 收尾阶段。后续围绕「二级 → 一级棋士」目标可能延伸的方向:
+
+- 评估权重自动调优(基于 benchmark 自对弈 + 进化算法)
+- SEE(Static Exchange Evaluation)替代部分 null move / quiescence 边界
+- 残局 tablebase(简单必胜局面:车vs单子、马炮vs单子)
+- 扩展开局库到 50+ 变着 + 主要变着 12+ 步深度
+- Web Worker 完整启用(浏览器实战验证 + 把搜索全部搬到 worker 端)
+
+### 14.5 验证方式
+
+```bash
+npm test            # 跑 15 个 node test
+node tests/ai-benchmark.js   # hard vs normal 4 局(可作 smoke)
+```
+
+---
+
+## 15. 附录
+
+### 15.1 术语表
 
 | 术语 | 说明 |
 |------|------|
@@ -596,7 +666,7 @@ flowchart LR
 | 炮架 | 炮吃子时位于炮与目标棋子之间的唯一棋子 |
 | 将帅照面 | 将与帅在同一路且中间没有棋子 |
 
-### 14.2 MVP 不包含范围
+### 15.2 MVP 不包含范围
 
 | 项目 | 说明 |
 |------|------|
@@ -604,5 +674,5 @@ flowchart LR
 | 账号体系 | 后续版本扩展 |
 | 完整长将长捉裁定 | MVP 仅记录和提示重复局面 |
 | 专业棋谱格式兼容 | MVP 仅提供可读文本棋谱 |
-| 高强度专业 AI | MVP 以休闲和学习体验为主 |
+| 高强度专业 AI | MVP 以休闲和学习体验为主;当前 hard 模式已达三级-二级棋士(见第 14 章),专业级 AI 仍待后续迭代 |
 
