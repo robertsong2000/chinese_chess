@@ -1,17 +1,17 @@
 {
-  "ranAt": "2026-08-08T11:59:29.895Z",
+  "ranAt": "2026-08-08T17:48:36.267Z",
   "config": {
     "GAMES": 4,
     "MAX_PLY": 80,
     "NO_CAPTURE_DRAW_PLY": 30,
     "HARD_DEADLINE_MS": 200,
-    "NORMAL_DEADLINE_MS": 150,
+    "NORMAL_DEADLINE_MS": 200,
     "TACTIC_DEADLINE_MS": 300,
     "TACTIC_PASS_THRESHOLD": 0.6
   },
   "tactics": {
-    "total": 5,
-    "passed": 5,
+    "total": 10,
+    "passed": 10,
     "rate": 1,
     "passThreshold": 0.6,
     "passThresholdMet": true,
@@ -95,16 +95,96 @@
           ],
           "pieceType": "general"
         }
+      },
+      {
+        "id": "T6",
+        "name": "炮通过架子吃无保护马(cannon capture via screen)",
+        "passed": true,
+        "move": {
+          "from": [
+            3,
+            9
+          ],
+          "to": [
+            3,
+            5
+          ],
+          "pieceType": "cannon"
+        }
+      },
+      {
+        "id": "T7",
+        "name": "过河兵吃高价值子(soldier trade-up)",
+        "passed": true,
+        "move": {
+          "from": [
+            4,
+            5
+          ],
+          "to": [
+            4,
+            4
+          ],
+          "pieceType": "soldier"
+        }
+      },
+      {
+        "id": "T8",
+        "name": "防守反吃将军子(defensive counter-capture)",
+        "passed": true,
+        "move": {
+          "from": [
+            4,
+            8
+          ],
+          "to": [
+            4,
+            5
+          ],
+          "pieceType": "chariot"
+        }
+      },
+      {
+        "id": "T9",
+        "name": "红马 fork 黑车 + 黑炮(horse fork - RED side)",
+        "passed": true,
+        "move": {
+          "from": [
+            4,
+            6
+          ],
+          "to": [
+            3,
+            4
+          ],
+          "pieceType": "horse"
+        }
+      },
+      {
+        "id": "T10",
+        "name": "双炮重叠:后炮通过前炮吃车(nested cannon capture)",
+        "passed": true,
+        "move": {
+          "from": [
+            4,
+            9
+          ],
+          "to": [
+            4,
+            5
+          ],
+          "pieceType": "cannon"
+        }
       }
     ]
   },
   "summary": {
     "games": 4,
     "hardWins": 2,
-    "normalWins": 0,
-    "draws": 2,
+    "normalWins": 1,
+    "draws": 1,
     "avgPly": 80,
-    "totalElapsedMs": 207908,
+    "totalElapsedMs": 189473,
     "perGame": [
       {
         "id": 1,
@@ -113,7 +193,7 @@
         "winner": "red",
         "reason": "material_majority",
         "plies": 80,
-        "elapsedMs": 48875
+        "elapsedMs": 44109
       },
       {
         "id": 2,
@@ -122,7 +202,7 @@
         "winner": null,
         "reason": "draw_material",
         "plies": 80,
-        "elapsedMs": 55076
+        "elapsedMs": 50817
       },
       {
         "id": 3,
@@ -131,16 +211,16 @@
         "winner": "red",
         "reason": "material_majority",
         "plies": 80,
-        "elapsedMs": 48943
+        "elapsedMs": 44273
       },
       {
         "id": 4,
         "red": "normal",
         "black": "hard",
-        "winner": null,
-        "reason": "draw_material",
+        "winner": "red",
+        "reason": "material_majority",
         "plies": 80,
-        "elapsedMs": 55014
+        "elapsedMs": 50274
       }
     ],
     "hardWinRate": 0.5

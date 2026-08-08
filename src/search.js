@@ -1205,6 +1205,22 @@ function endgamePatternBonus(board, side) {
     }
     if (hasAdvanced) bonus += ENDGAME_PATTERN_BONUS.advancedSoldierVsLoneKing;
   }
+  // === Phase 10 #50 新增 3 个经典必胜残局模式 ===
+  // 6. 单车对单马(opp 仅 1 马,无士象/其他攻子/兵):经典必胜,马无支援终被擒
+  if (myChariots >= 1 && oppHorses === 1 && oppCannons === 0
+    && oppChariots === 0 && oppGuards === 0 && oppSoldiers === 0) {
+    bonus += ENDGAME_PATTERN_BONUS.chariotVsLoneHorse;
+  }
+  // 7. 单车对单炮(opp 仅 1 炮,无士象/其他攻子/兵):经典必胜,炮无架子无效
+  if (myChariots >= 1 && oppCannons === 1 && oppHorses === 0
+    && oppChariots === 0 && oppGuards === 0 && oppSoldiers === 0) {
+    bonus += ENDGAME_PATTERN_BONUS.chariotVsLoneCannon;
+  }
+  // 8. 双车对单攻子(opp 仅 1 马/炮,无士象/兵):必胜,双车错杀
+  if (myChariots >= 2 && oppAttackers === 1 && oppChariots === 0
+    && oppGuards === 0 && oppSoldiers === 0) {
+    bonus += ENDGAME_PATTERN_BONUS.twoChariotsVsSingleAttacker;
+  }
   return bonus;
 }
 

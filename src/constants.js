@@ -409,6 +409,13 @@ const ENDGAME_PATTERN_BONUS = {
   horseSoldierVsAdvisor: 200,      // 马兵对单士:经典必胜(兵借马势破士)
   chariotVsGuardsOnly: 120,        // 车对仅剩士象(无对方攻子):车必破士象
   advancedSoldierVsLoneKing: 80,   // 过河兵对孤将(对方无攻子无士象):鼓励兵升变
+  // === Phase 10 #50 新增 3 个经典必胜残局模式 ===
+  // 单车对单马 / 单车对单炮(无士象)/ 双车对单攻子:均为残局理论上的必胜或绝对优势结构,
+  // 鼓励 AI 在中局末主动换子进入。幅度低于"车炮/车马对单车"(200),因为这些模式对
+  // 实施精度要求更高(需精确知道位置),给的鼓励应稍保守。
+  chariotVsLoneHorse: 160,         // 单车对单马(opp 仅 1 马无士象):必胜,马无支援终被擒
+  chariotVsLoneCannon: 160,        // 单车对单炮(opp 仅 1 炮无士象):必胜,炮无架无效
+  twoChariotsVsSingleAttacker: 180, // 双车对单攻子(opp 1 马/炮,无士象):必胜,双车错杀
 };
 
 // 战术模式加分(fork / pin / discovered attack 检测)
