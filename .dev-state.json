@@ -674,6 +674,25 @@
       "attempts": 1,
       "completed_at": "2026-08-08T18:55:03+08:00",
       "commit_sha": "aeef07c"
+    },
+    {
+      "id": 37,
+      "phase": 5,
+      "category": "棋力-退化修复",
+      "title": "Phase 5 #30 baseline 退化定位 + 修复(Aspiration Window)",
+      "description": "[本次完成 2026-08-08] Phase 5 #36 修复 ENDGAME_PATTERN_BONUS 后残留退化:hard 执黑仍输 normal(material_majority)。ablation 实验(ASPIRATION_MIN_DEPTH=99 临时禁用 aspiration,保留 root PVS)定位元凶:Aspiration Window 是退化源。数据:aspiration 启用 → hard 执黑 1 和 1 输;aspiration 禁用 → hard 执黑 2 和。修复:加 ASPIRATION_ENABLED flag(默认 false)+ runAISearch 守卫。33/33 测试通过。Root PVS 单独保留(不引入退化)。残留:hard 执黑未能反先胜(只和棋),需更深搜索 / 更精确评估。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js",
+        "docs/plans/benchmark-results.md"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 25,
+      "attempts": 1,
+      "completed_at": "2026-08-08T19:39:00.935190+08:00",
+      "commit_sha": "28a8707"
     }
   ],
   "history": [
@@ -963,6 +982,14 @@
       "summary": "Phase 5 退化定位 + 修复:消融实验找出 ENDGAME_PATTERN_BONUS 是 Phase 4 self-play 退化元凶(置 0 后 hardWinRate 0% → 50%)。修复:(1) 幅度降到原值 ~40%(200/200/200/120/80);(2) endgamePatternBonus 加 isEndgame 守卫防止中局触发。33/33 测试通过(新增 1 个中局守卫回归测试)。hard 执红从必 stalemate 变成必 checkmate 胜。残留 hard 执黑输 normal(#30 baseline 退化)留给下一个 TODO。",
       "commit_sha": "aeef07c",
       "full_commit_sha": "aeef07c"
+    },
+    {
+      "timestamp": "2026-08-08T19:39:00.935225+08:00",
+      "todo_id": 37,
+      "action": "completed",
+      "summary": "#37 Phase 5 残留退化定位 + 修复:ablation(ASPIRATION_MIN_DEPTH=99)确认 Aspiration Window 是 hard 执黑输 normal 的元凶。修复:加 ASPIRATION_ENABLED=false flag + runAISearch 守卫,保留代码 + Root PVS。benchmark 验证:hard 执黑从 1 和 1 输 → 2 和(不再输)。33/33 测试通过(契约测试扩展验证 enabled=false)。",
+      "commit_sha": "28a8707",
+      "full_commit_sha": "28a8707b606c9c7c624ea0c4d64d6d0cc1e4988c"
     }
   ],
   "rules": [
@@ -974,5 +1001,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 5 #36 完成(退化定位 + 修复 ENDGAME_PATTERN_BONUS,hardWinRate 0% → 50%)。建议下一个 TODO 优先:(1) 定位 hard 执黑输 normal 的 #30 baseline 退化 — 二分 #29 vs #30 commit 跑缩减 benchmark,验证 Aspiration Window / Root PVS 是否引入退化;(2) 修复后再做更深优化(LMR 深化、更精确 SEE、更多战术题 >=10、longer self-play >= 20 局提置信度);(3) 当前棋力 ~1900-2000(二级棋士),距离一级棋士 2200 还差 200-300 Elo。"
+  "next_run_hint": "Phase 5 #37 完成(Aspiration Window 禁用,hard 执黑从输 → 和)。当前 self-play hardWinRate=0.5(hard 执红稳定胜,hard 执黑稳定和)。建议下一个 TODO 优先:(1) 提升评估函数精度 — quiescence SEE/Delta pruning 经典优化,减少明显亏子 capture 的搜索,直接服务'完全不送子';(2) 加更多战术题(>= 10)+ longer self-play(>= 20 局)提置信度;(3) 探索'hard 执黑反先胜'需更深搜索(LMR 深化 / Singular Extension)或更精确评估(残局 tablebase);(4) 当前棋力 ~1900-2000(二级棋士),距离一级棋士 2200 还差 200-300 Elo。"
 }
