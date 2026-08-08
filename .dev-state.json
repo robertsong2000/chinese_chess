@@ -449,11 +449,11 @@
         "app.js"
       ],
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 25,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T08:44:43.978954+08:00",
+      "commit_sha": "9d94db1"
     },
     {
       "id": 20,
@@ -698,6 +698,14 @@
       "action": "completed",
       "summary": "拆分 app.js 第 2 步:19 个棋规函数(livePieces/boardIndex/pieceAt/inBoard/opposite/sideName/palaceContains/crossedRiver/rawMovesForPiece/makeCandidate/countBetween/countLineBetween/generalsFacing/cloneBoard/applyMoveToBoard/isInCheck/pieceAttacksSquare/legalMovesForPiece/allLegalMoves)移到 src/rules.js。isPlayerTurn 留 app.js(强 state 依赖)。加载顺序 constants → rules → app,index.html 加 <script>,engine-harness.js 与 ai-worker-smoke.test.js vm.runInContext 注入 rules.js。15/15 测试通过,app.js 1901→1658 行(-243)。",
       "commit_sha": "3550cf1"
+    },
+    {
+      "timestamp": "2026-08-08T08:44:43.978954+08:00",
+      "todo_id": 19,
+      "action": "completed",
+      "summary": "拆分 app.js 第 3 步:AI 搜索函数移到 src/search.js。开局库(OPENING_BOOK_*/getOpeningBookMove)、时间管理(allocateTimeFactor)、runAISearch、评估(evaluateBoard/isEndgame/endgameSoldierBonus/kingSafetyScore/positionalBonus/buildControlMaps)、搜索(negamax/quiescence)、走法排序(orderMoves/moveOrderingScore)、Killer/History/TT(computeZobrist/ttProbe/ttStore)、循环检测(capturedValue/canonicalBoardKey/positionKey/positionRepetitionCount/isDirectReversal/rootCyclePenalty/preferNonRepeatingMoves)、shuffle/pickEasyMove 等全部移出。app.js 仅保留 chooseAIMove / Worker 路径 / scheduleAI 等强 state/UI 代码。加载顺序 constants → rules → search → app;index.html / engine-harness.js / ai-worker-smoke.test.js 同步注入 search.js。15/15 测试通过,app.js 1658→831 行(-827),src/search.js 839 行。",
+      "commit_sha": "9d94db1",
+      "full_commit_sha": "9d94db12fdb267b1a5d6dfa949b3a9adc796b7fc"
     }
   ],
   "rules": [
@@ -709,5 +717,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "下次运行应做 id=19 拆分 app.js 第 3 步:把 AI 搜索函数(search/negamax/quiescence/evaluateBoard 等)移到 src/search.js。加载顺序接续为 constants → rules → search → app。预估 25 分钟。"
+  "next_run_hint": "下次运行应做 id=20 加 Issue 模板(.github/ISSUE_TEMPLATE/bug.md + feature.md + .github/PULL_REQUEST_TEMPLATE.md)。预估 15 分钟。后续 phase 3 待办:#21 docker-compose healthcheck、#22 更新 PRD 反映现状。"
 }
