@@ -871,3 +871,143 @@ test("#40 ttStore depth-preferred: deeper existing entry is not overwritten by s
   assert.equal(result.score, 100, "PV score must survive shallow store attempt");
   assert.equal(result.bestMoveKey, "pv-key", "PV bestMoveKey must survive shallow store attempt");
 });
+
+test("#41 mobility refinement: initial position is symmetric (0 bonus for all pieces)", () => {
+  // 关键不变量:初始局面任何棋子的 mobilityRefinementBonus 必须为 0,
+  // 保证初始 evaluateBoard 仍 ≡ 0(既有的"the initial position evaluates equally for both sides"测试)。
+  // 初始局面:车列被马/兵阻挡(非开放)、马未过河、炮未对宫(列 1/7 不在 3-5,行 2/7 不在敌宫行)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = initialPieces();
+    const sums = { red: 0, black: 0 };
+    let max = 0;
+    for (const p of livePieces(board)) {
+      const b = mobilityRefinementBonus(p, board);
+      sums[p.side] += b;
+      if (b > max) max = b;
+    }
+    return { redSum: sums.red, blackSum: sums.black, maxBonus: max };
+  })()`);
+  assert.equal(result.redSum, 0, "initial position: red mobility refinement sum must be 0");
+  assert.equal(result.blackSum, 0, "initial position: black mobility refinement sum must be 0");
+  assert.equal(result.maxBonus, 0, "initial position: no individual piece should receive refinement bonus");
+});
+
+test("#41 chariotOpenFileBonus: open / semi-open / blocked file", () => {
+  // 三种情形:
+  //   1) 开放线:列上仅车自己 → +MOBILITY_REFINEMENT.chariotOpenFile
+  //   2) 半开放线:列上有 1 个敌方子 → +chariotSemiOpenFile
+  //   3) 受阻:列上有 1 个友方子 → 0(车未获得行动自由)
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    // 1) 开放线:红车在 (0,5),列 0 无其他子
+    const open = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 0, y: 5, alive: true },
+    ];
+    // 2) 半开放线:红车在 (0,5),列 0 有 1 个黑兵
+    const semi = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 0, y: 5, alive: true },
+      { id: 'bs', side: SIDES.BLACK, type: TYPES.SOLDIER, x: 0, y: 3, alive: true },
+    ];
+    // 3) 受阻:红车在 (0,5),列 0 有 1 个红兵(友方)
+    const blocked = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 0, y: 5, alive: true },
+      { id: 'rs', side: SIDES.RED, type: TYPES.SOLDIER, x: 0, y: 6, alive: true },
+    ];
+    return {
+      open: mobilityRefinementBonus(open.find(p => p.id === 'rc'), open),
+      semi: mobilityRefinementBonus(semi.find(p => p.id === 'rc'), semi),
+      blocked: mobilityRefinementBonus(blocked.find(p => p.id === 'rc'), blocked),
+      openConst: MOBILITY_REFINEMENT.chariotOpenFile,
+      semiConst: MOBILITY_REFINEMENT.chariotSemiOpenFile,
+    };
+  })()`);
+  assert.equal(result.open, result.openConst, `open file bonus should be ${result.openConst}, got ${result.open}`);
+  assert.equal(result.semi, result.semiConst, `semi-open file bonus should be ${result.semiConst}, got ${result.semi}`);
+  assert.equal(result.blocked, 0, `blocked file (friendly piece) should give 0, got ${result.blocked}`);
+});
+
+test("#41 horseCenterBonus: central crossed-river horse gets bonus", () => {
+  // 中央列(3-5)+ 过河才加分;未过河或边线马无加分。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const base = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+    ];
+    const mkHorse = (x, y, side = SIDES.RED) => [...base,
+      { id: 'h', side, type: TYPES.HORSE, x, y, alive: true }];
+    // 红马在 (4,3):中央列 + 已过河(y<=4 for red)→ +bonus
+    const redCenter = mkHorse(4, 3);
+    // 红马在 (4,6):中央列 + 未过河 → 0
+    const redNotCrossed = mkHorse(4, 6);
+    // 红马在 (1,3):边线 + 过河 → 0
+    const redEdge = mkHorse(1, 3);
+    // 黑马在 (4,6):中央列 + 已过河(y>=5 for black)→ +bonus
+    const blackCenter = mkHorse(4, 6, SIDES.BLACK);
+    return {
+      redCenter: mobilityRefinementBonus(redCenter.find(p => p.id === 'h'), redCenter),
+      redNotCrossed: mobilityRefinementBonus(redNotCrossed.find(p => p.id === 'h'), redNotCrossed),
+      redEdge: mobilityRefinementBonus(redEdge.find(p => p.id === 'h'), redEdge),
+      blackCenter: mobilityRefinementBonus(blackCenter.find(p => p.id === 'h'), blackCenter),
+      const: MOBILITY_REFINEMENT.horseCenter,
+    };
+  })()`);
+  assert.equal(result.redCenter, result.const, `red center horse should get +${result.const}, got ${result.redCenter}`);
+  assert.equal(result.blackCenter, result.const, `black center horse should get +${result.const}, got ${result.blackCenter}`);
+  assert.equal(result.redNotCrossed, 0, `horse not crossed river should get 0, got ${result.redNotCrossed}`);
+  assert.equal(result.redEdge, 0, `edge horse should get 0, got ${result.redEdge}`);
+});
+
+test("#41 cannonPalaceThreatBonus: cannon aimed at enemy palace with exactly 1 screen", () => {
+  // 红炮对黑宫:炮在 col 4(中央宫列),y=7,与宫(y=0..2)之间恰好 1 架 → +bonus。
+  // 无架或 2+ 架都不加分。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    // 1) 1 架:红炮 (4,7),架在 (4,4),射入黑宫
+    const one = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rp', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 7, alive: true },
+      { id: 'screen', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 4, alive: true },
+    ];
+    // 2) 0 架:无架,炮直接对宫
+    const zero = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rp', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 7, alive: true },
+    ];
+    // 3) 2 架:过多遮挡
+    const two = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rp', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 7, alive: true },
+      { id: 's1', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 4, alive: true },
+      { id: 's2', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 5, alive: true },
+    ];
+    // 4) 非宫列:炮在 col 1(不在 3-5),无视架也不加分
+    const offCol = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rp', side: SIDES.RED, type: TYPES.CANNON, x: 1, y: 7, alive: true },
+      { id: 'screen', side: SIDES.RED, type: TYPES.SOLDIER, x: 1, y: 4, alive: true },
+    ];
+    return {
+      oneScreen: mobilityRefinementBonus(one.find(p => p.id === 'rp'), one),
+      zeroScreen: mobilityRefinementBonus(zero.find(p => p.id === 'rp'), zero),
+      twoScreens: mobilityRefinementBonus(two.find(p => p.id === 'rp'), two),
+      offCol: mobilityRefinementBonus(offCol.find(p => p.id === 'rp'), offCol),
+      const: MOBILITY_REFINEMENT.cannonPalaceThreat,
+    };
+  })()`);
+  assert.equal(result.oneScreen, result.const, `1 screen should give +${result.const}, got ${result.oneScreen}`);
+  assert.equal(result.zeroScreen, 0, `0 screen (no threat) should give 0, got ${result.zeroScreen}`);
+  assert.equal(result.twoScreens, 0, `2+ screens should give 0, got ${result.twoScreens}`);
+  assert.equal(result.offCol, 0, `cannon not on palace column should give 0, got ${result.offCol}`);
+});

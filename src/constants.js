@@ -334,6 +334,16 @@ const MOBILITY_VALUE = {
   soldier: 2,
 };
 
+// #41 评估精化:车马炮 mobility 精细化 + 王宫威胁加分。
+// 直接服务"看 5-7 步":更准的 eval 让 alpha-beta cutoff 更精确。
+// 取值保守(参考子力:兵 100 / 马 430 / 炮 450 / 车 900),避免 #36/#37 类 self-play 退化。
+const MOBILITY_REFINEMENT = {
+  chariotOpenFile: 25,      // 车 在无人阻挡的列(开放线):行动自由 + 控制纵深
+  chariotSemiOpenFile: 12,  // 车在列上仅 1 个敌方子(半开放线):仍是好的攻击位
+  horseCenter: 10,          // 马 在中央列(3-5)+ 过河:中心马、控制要点
+  cannonPalaceThreat: 18,   // 炮对宫:同列/同行射入敌宫且有 1 架(经典"巡宫炮")
+};
+
 const POSITION_BONUS = {
   general: [
     [0, 0, 0, 8, 12, 8, 0, 0, 0],

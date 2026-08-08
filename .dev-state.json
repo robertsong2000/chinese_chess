@@ -746,9 +746,11 @@
         "src/search.js"
       ],
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 25,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-08T20:44:28.145538+08:00",
+      "commit_sha": "15403ceb96f2695a49f27522b340ef0ac15d42d5"
     },
     {
       "id": 41,
@@ -760,9 +762,11 @@
         "src/search.js"
       ],
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 25,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-08T21:15:38.363418+08:00",
+      "commit_sha": "PENDING"
     },
     {
       "id": 42,
@@ -1103,6 +1107,20 @@
       "summary": "#39 LMP:浅层(depth<=2)+ 走法排序后第 5+(index>=4)+ quiet 非 check 走法直接 skip。与 futility 互补(节点级 vs 走法位置级)。3 个常量(LMP_MAX_DEPTH=2 / LMP_MIN_INDEX=4 / LMP_MIN_WINDOW=1),复用 futility 的 PVS zero-window probe 路径排除。2 个回归测试(契约 + 黑车吃红马战术)。37/37 测试通过(35+2)。benchmark hardWinRate=0.5 与 #37/#38 baseline 一致,战术 5/5 pass,无回归。",
       "commit_sha": "fb8c5fd",
       "full_commit_sha": "fb8c5fdfaa5380af479c570d9b5b1d74cf9f8e50"
+    },
+    {
+      "timestamp": "2026-08-08T20:44:28.145538+08:00",
+      "todo_id": 40,
+      "action": "completed",
+      "summary": "TT replacement scheme: depth-preferred partial eviction (TT_EVICT_RATIO=0.25)。ttStore 改为 ttEvictShallow,按 depth 升序删除最浅 25%,保留深条目与 PV/EXACT 信息,避免全清。+3 测试(契约 + ttEvictShallow 行为 + ttStore depth-preferred)。",
+      "commit_sha": "15403ceb96f2695a49f27522b340ef0ac15d42d5"
+    },
+    {
+      "timestamp": "2026-08-08T21:15:38.363418+08:00",
+      "todo_id": 41,
+      "action": "completed",
+      "summary": "#41 评估函数车马炮 mobility 精化:chariotOpenFile(25)/chariotSemiOpenFile(12)/horseCenter(10)/cannonPalaceThreat(18)。3 个精化函数(mobilityRefinementBonus 调度)+ evaluateBoard 接入。初始局面 0 加分(对称不变量保持)。+4 测试(对称 + 车 + 马 + 炮)。",
+      "commit_sha": "PENDING"
     }
   ],
   "rules": [
@@ -1114,5 +1132,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 6 #39 LMP 完成。当前 phase 6 进度:2/6 done(#38 delta pruning, #39 LMP),剩 4 项 pending(#40 TT replacement / #41 mobility 精化 / #42 扩展 tactics + 长 benchmark / #43 killer/history 调优)。self-play hardWinRate=0.5 稳定(hard 执红胜,hard 执黑和/输)。建议下一个 TODO 优先级:(1) #42 扩展 tactics 到 10+ 题 + 长 benchmark 20+ 局提置信度,是验证前几个优化真实效果的关键 — 当前 4 局 deterministic 置信度低;(2) #40 TT replacement scheme,避免 TT 满时全清空丢失 PV 信息,直接提升搜索深度;(3) #41 mobility 精化,提升评估精度 → alpha-beta cutoff 更准 → 深度自然提升;(4) 当前棋力 ~1900-2000(二级棋士),距离一级棋士 2200 还差 200-300 Elo。"
+  "next_run_hint": "Phase 6 #41 完成:车马炮 mobility 精化 — 车开放线(+25 全开/+12 半开)、马中心(中央列3-5+过河 +10)、炮对宫(同列/行射入敌宫+1架 +18)。evaluateBoard 接入 mobilityRefinementBonus(piece, board)。初始局面 0 加分(对称不变量),3 个 endgame/midgame 测试无回归。+4 测试(初始对称 + 车开放线 3 场景 + 马中心 4 场景 + 炮对宫 4 场景)。Phase 6 进度:4/6 done(#38 delta pruning,#39 LMP,#40 TT replace,#41 mobility 精化),剩 2 项:#42 扩展 tactics 测试集(>=10 题)+ 长 benchmark(>=20 局),#43 Killer/History 表深度调优 + IID 验证。建议下一个 TODO:#42(验证近期优化真实效果,当前 4 局 deterministic 置信度低)或 #43(继续深度优化)。棋力 ~1900-2000(二级棋士),距一级棋士 2200 仍差 200-300 Elo。"
 }

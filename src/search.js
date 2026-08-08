@@ -960,6 +960,7 @@ function evaluateBoard(board, aiSide) {
     let value = PIECE_VALUE[piece.type];
     value += positionalBonus(piece);
     value += rawMovesForPiece(board, piece).length * (MOBILITY_VALUE[piece.type] || 0);
+    value += mobilityRefinementBonus(piece, board);
     const square = piece.y * 9 + piece.x;
     if (controlMaps[opposite(piece.side)].has(square)) value -= Math.min(140, value * 0.12);
     if (controlMaps[piece.side].has(square)) value += Math.min(70, value * 0.05);
@@ -1205,6 +1206,87 @@ function endgameSoldierBonus(piece) {
   if (!crossedRiver(piece.side, piece.y)) return 0;
   const progress = piece.side === SIDES.RED ? 4 - piece.y : piece.y - 5;
   return progress * ENDGAME_SOLDIER_ADVANCE_BONUS;
+}
+
+// #41 车马炮 mobility 精化:车开放线 / 马中心 / 炮对宫。
+// 设计目标:eval 更准 → alpha-beta cutoff 更精确 → 自然延伸深度。
+// 取值保守(见 MOBILITY_REFINEMENT),与 POSITION_BONUS / ATTACK_ZONE_BONUS 互补不重叠。
+function mobilityRefinementBonus(piece, board) {
+  switch (piece.type) {
+    case TYPES.CHARIOT:
+      return chariotOpenFileBonus(piece, board);
+    case TYPES.HORSE:
+      return horseCenterBonus(piece);
+    case TYPES.CANNON:
+      return cannonPalaceThreatBonus(piece, board);
+    default:
+      return 0;
+  }
+}
+
+// 车在开放线 / 半开放线:扫描车所在列,统计友方/敌方棋子数。
+// 友方 0 + 敌方 0 = 真开放线(行动自由 + 控制纵深);
+// 友方 0 + 敌方 1+ = 半开放线(仍是好的攻击位,可瞄准敌方子)。
+// 友方 1+ 不加分(车被自家子挡住,价值未提升)。
+function chariotOpenFileBonus(piece, board) {
+  let friendlyOthers = 0;
+  let enemies = 0;
+  for (const p of livePieces(board)) {
+    if (!p.alive || p.id === piece.id) continue;
+    if (p.x !== piece.x) continue;
+    if (p.side === piece.side) friendlyOthers += 1;
+    else enemies += 1;
+  }
+  if (friendlyOthers === 0 && enemies === 0) return MOBILITY_REFINEMENT.chariotOpenFile;
+  if (friendlyOthers === 0 && enemies >= 1) return MOBILITY_REFINEMENT.chariotSemiOpenFile;
+  return 0;
+}
+
+// 马在中心:中央列(3-5)+ 过河(进入敌境)。
+// 中心马控制要点、威胁多面,且不易被兵驱赶;已过河的中心马价值显著高于边线马。
+// 不与 POSITION_BONUS[horse] 重叠:POSITION_BONUS 是位置表(纯坐标),
+// 此项额外要求"过河"(战术威胁),语义不同。
+function horseCenterBonus(piece) {
+  if (piece.x < 3 || piece.x > 5) return 0;
+  if (!crossedRiver(piece.side, piece.y)) return 0;
+  return MOBILITY_REFINEMENT.horseCenter;
+}
+
+// 炮对宫:炮所在列或行射入敌方宫殿(cols 3-5, palace rows),且炮与宫之间恰好 1 架。
+// 1 架 = 真威胁(经典"巡宫炮",可借架攻将/破士象);
+// 0 架 = 空射(无目标);2+ 架 = 暂无威胁(炮被多个子遮挡)。
+// 与 KING_SAFETY.cannonPressure 互补:后者只看距离,这里看真正的"有架"威胁。
+function cannonPalaceThreatBonus(piece, board) {
+  const enemy = opposite(piece.side);
+  const enemyPalaceCols = [3, 4, 5];
+  const enemyPalaceRows = enemy === SIDES.RED ? [7, 8, 9] : [0, 1, 2];
+  let bonus = 0;
+  // 列威胁:炮在敌方宫列(3-5)上
+  if (enemyPalaceCols.includes(piece.x)) {
+    const palaceRowCenter = enemy === SIDES.RED ? 8 : 1;
+    const lo = Math.min(piece.y, palaceRowCenter);
+    const hi = Math.max(piece.y, palaceRowCenter);
+    let screens = 0;
+    for (const p of livePieces(board)) {
+      if (!p.alive || p.id === piece.id) continue;
+      if (p.x !== piece.x) continue;
+      if (p.y > lo && p.y < hi) screens += 1;
+    }
+    if (screens === 1) bonus += MOBILITY_REFINEMENT.cannonPalaceThreat;
+  }
+  // 行威胁:炮在敌方宫行上
+  if (enemyPalaceRows.includes(piece.y)) {
+    let screens = 0;
+    for (const p of livePieces(board)) {
+      if (!p.alive || p.id === piece.id) continue;
+      if (p.y !== piece.y) continue;
+      const lo = Math.min(piece.x, 4);
+      const hi = Math.max(piece.x, 4);
+      if (p.x > lo && p.x < hi) screens += 1;
+    }
+    if (screens === 1) bonus += MOBILITY_REFINEMENT.cannonPalaceThreat;
+  }
+  return bonus;
 }
 
 // 王的安全评估:负数表示该方王处于风险,正数表示防守稳固。
