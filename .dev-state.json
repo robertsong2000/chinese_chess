@@ -1180,8 +1180,10 @@
       ],
       "estimated_min": 18,
       "priority": "P0",
-      "status": "in_progress",
-      "attempts": 0
+      "status": "done",
+      "attempts": 1,
+      "completed_at": "2026-08-08T23:17:33.931116Z",
+      "commit_sha": "6ae0582b97afdef45c61281d4ab473431a20d9ca"
     },
     {
       "id": 62,
@@ -1678,6 +1680,13 @@
       "action": "completed",
       "summary": "#60 Self-play 退化回归测试:tests/ai-search.test.js 加 4-局 hard-vs-normal self-play 测试(2 局 hard 先手 + 2 局 normal 先手,maxply=12,极短 deadline 通过 timeScale 放大 performance.now)。断言 hardWins >= normalWins(hard 不被 normal 整体战胜,Phase 5/7 类退化检测)。78/78 tests pass,npm test 总时长 ~16s(#60 自身 ~11s)。",
       "commit_sha": "3b9135cc180c06af8c1904570994fc9683ae8cdd"
+    },
+    {
+      "timestamp": "2026-08-08T23:17:33.931116Z",
+      "todo_id": 61,
+      "action": "completed",
+      "summary": "#61 Connected Chariots eval: constants CONNECTED_CHARIOTS_BONUS=30;search.js chariotCoordinationBonus(board, side) — 同方两车同列/行 + 中间无子 → +30/对;evaluateBoard 双向相减(初始 0/0,中局过河后联通触发)。Spot check: 同列(3,3)/(3,6) 无阻挡 → +30。78/78 tests pass.",
+      "commit_sha": "6ae0582b97afdef45c61281d4ab473431a20d9ca"
     }
   ],
   "rules": [
@@ -1689,5 +1698,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 13 启动:本次完成 TODO #61 (Connected Chariots eval)。下次:#62 Hanging piece static penalty,然后 #63 Phase 13 self-play 回归测试。"
+  "next_run_hint": "Phase 13 TODO #61 完成(2026-08-08T23:17:33.931116Z)。下次:#62 Hanging piece static penalty(静态送子检测,补强 quiescence 在非 capture 序列上的盲区)。然后 #63 Phase 13 self-play 防退化回归测试。"
 }
