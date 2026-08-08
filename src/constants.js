@@ -134,6 +134,28 @@ const QUIESCENCE_DELTA_MARGIN = 500;
 // SEE-based quiescence pruning 已禁用(self-play 退化);保留常量便于将来重新启用。
 const QUIESCENCE_SEE_LOSING_THRESHOLD = 300;
 
+// === Quiescence Check Move Extension ===
+// 经典 Stockfish/Roces quiescence 在 !inCheck 时不仅搜 capture,还扩展"非 capture 但能给将军"
+// 的走法(quiescence checks)。中国象棋的"将军-抽将/抽子"是常见战术 — 若 quiescence 只看
+// capture,会漏看"先将军(quiet)→ 对方 forced evasion → 抽子"的战术组合。
+// 直接服务"完全不送子"(不漏看 forced check 威胁)+ "中局战术组合能力"。
+//
+// 设计要点:
+//   - MIN_DEPTH = 2:仅当 quiescence 剩余深度 >= 2 时启用(留 1 ply 给 evasion 搜索)。
+//     depth=1 时启用会让 check move 搜索在下一节点立刻 standPat,无法看到 forced 回应。
+//   - MAX_MOVES = 3:每节点最多扩展前 3 个 check moves(走法排序后),避免 check move 过多
+//     拖慢 quiescence。check move 命中率约 5-10%(经典国际象棋经验),限制 K=3 控制开销。
+//   - 用 applyMoveToBoard + isInCheck 检测(最准确,接受 ~O(N) 开销):check 检测的精度
+//     直接决定 quiescence 是否漏看 / 误判,轻量近似(如 pieceAttacksSquare)会因忽略走完后
+//     board 状态变化(炮架 / 飞将)而误判。
+//   - check moves 排序时排在 captures 之后(capture 仍是 quiescence 的核心目标),
+//     走法 ordering 已包含 +9000 check bonus(见 moveOrderingScore),自动归类到合理位置。
+//   - 递归 quiescence 时,check move 走完后对方被迫 evasion,evasion 包含所有走法
+//     (quiescence 已在 inCheck 时搜全 moves),自然终止 forced 序列。
+const QUIESCENCE_CHECK_ENABLED = true;
+const QUIESCENCE_CHECK_MIN_DEPTH = 2;
+const QUIESCENCE_CHECK_MAX_MOVES = 3;
+
 // === Aspiration Window + Root PVS ===
 // 经典 root 优化:depth >= ASPIRATION_MIN_DEPTH 时,以前一深度的 bestScore 为中心,
 // 用 ±ASPIRATION_WINDOW 的窄窗口搜索;fail-high/fail-low 时用全窗口 re-search。

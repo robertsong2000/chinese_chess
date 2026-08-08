@@ -1081,18 +1081,47 @@ function quiescence(board, side, alpha, beta, aiSide, depth, deadline, legalMove
   }
   const moves = legalMoves || allLegalMoves(board, side);
   if (!moves.length) return inCheck ? -MATE_SCORE - depth : -8000;
-  const tacticalMoves = orderMoves(
-    board,
-    inCheck
-      ? moves
-      : moves.filter((move) => move.capturedPieceId),
-    side,
-    aiSide,
-  );
-  for (const move of tacticalMoves) {
+
+  // === Quiescence Check Move Extension(非 inCheck 时扩展能给将军的 quiet 走法)===
+  // 经典 Stockfish quiescence 不仅搜 capture,还扩展"非 capture 但能给将军"的走法,
+  // 帮助识别"将军-抽将/抽子"战术组合 — 当前 quiescence 只看 capture 会漏看这类 forced 序列。
+  // 限制:depth >= MIN(留 1 ply 给 evasion)+ 每节点最多前 MAX 个 check moves(开销可控)。
+  // 直接服务"完全不送子"(不漏看 forced check 威胁)+ "中局战术组合能力"。
+  let candidateMoves;
+  if (inCheck) {
+    // 将军时必须搜所有 evasion(含 capture / 将走 / 拦挡)
+    candidateMoves = orderMoves(board, moves, side, aiSide);
+  } else {
+    const captures = moves.filter((move) => move.capturedPieceId);
+    const orderedCaptures = orderMoves(board, captures, side, aiSide);
+    if (QUIESCENCE_CHECK_ENABLED && depth >= QUIESCENCE_CHECK_MIN_DEPTH) {
+      // check move 检测:用 applyMoveToBoard + isInCheck(最准确,接受 ~O(N) 开销)。
+      // 走法排序后取前 K 个 — moveOrderingScore 已含 +9000 check bonus,典型 check moves 会自然靠前。
+      const enemy = opposite(side);
+      const checkMoves = [];
+      for (const move of moves) {
+        if (move.capturedPieceId) continue;
+        if (checkMoves.length >= QUIESCENCE_CHECK_MAX_MOVES) break;
+        const childBoard = applyMoveToBoard(board, move);
+        if (isInCheck(childBoard, enemy)) checkMoves.push(move);
+      }
+      if (checkMoves.length) {
+        // check moves 排在 captures 之后(capture 仍是 quiescence 核心),
+        // 但 moveOrderingScore 内的 +9000 check bonus 仅对 captures 之后的 quiet 走法有意义。
+        candidateMoves = orderedCaptures.concat(orderMoves(board, checkMoves, side, aiSide));
+      } else {
+        candidateMoves = orderedCaptures;
+      }
+    } else {
+      candidateMoves = orderedCaptures;
+    }
+  }
+
+  for (const move of candidateMoves) {
     // === Delta pruning(safe;!inCheck 时):standPat + capturedValue + MARGIN ≤ alpha → 剪枝 ===
     // 直觉:capture 后总价值仍 ≤ alpha,该 capture 序列不可能提升 alpha。MARGIN 容纳后续可能的额外收益。
     // 被将军时不剪:必须搜索所有 evasion(包括 capture)。
+    // check move 不在 delta pruning 范围(它是 quiet 走法,无 capturedValue)。
     if (!inCheck && move.capturedPieceId) {
       const capturedValue = pieceValueOnBoard(board, move.capturedPieceId);
       if (standPat + capturedValue + QUIESCENCE_DELTA_MARGIN <= alpha) {

@@ -1704,3 +1704,61 @@ test("#52 TT mate score: losing mate (negative) adjusts symmetrically", () => {
     `ttProbe at deeper ply=5 (mate further away = less negative) must return -29996, got ${result.deeperPly}`);
 });
 
+// === #53 Quiescence Check Move Extension 契约 ===
+// quiescence 在 !inCheck + depth >= MIN 时,扩展能给将军的 quiet 走法,
+// 帮助识别"将军-抽将/抽子"战术组合。直接服务"完全不送子"+ "中局战术组合能力"。
+test("#53 quiescence check extension constants are configured for forced-tactic detection", () => {
+  // 契约:ENABLED = true(Phase 11 启用);MIN_DEPTH = 2(留 1 ply 给 evasion 搜索,
+  // depth=1 时 check 扩展无法看到 forced 回应);
+  // MAX_MOVES = 3(每节点最多前 K 个 check moves,经典 Stockfish 经验值,控制 quiescence 开销)。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    enabled: QUIESCENCE_CHECK_ENABLED,
+    minDepth: QUIESCENCE_CHECK_MIN_DEPTH,
+    maxMoves: QUIESCENCE_CHECK_MAX_MOVES,
+  }))()`);
+  assert.equal(result.enabled, true, "QUIESCENCE_CHECK_ENABLED should be true (Phase 11)");
+  assert.equal(result.minDepth, 2, "QUIESCENCE_CHECK_MIN_DEPTH should be 2");
+  assert.equal(result.maxMoves, 3, "QUIESCENCE_CHECK_MAX_MOVES should be 3");
+});
+
+test("#53 quiescence check extension: non-capture check move is searched when depth >= MIN", () => {
+  // 战术局面:red 车 (4,5) 与 black 将 (4,1) 同列直线,中间无遮挡 → red 车已将军 black。
+  // 但本测试关注的是 *quiescence 内* 给出 *quiet* check move 的扩展:
+  // red 方 standPat = 0(对称子力),无 capture move,但有 quiet check move (车 4,5 → 4,2 给将)。
+  // depth=2(>=MIN)→ quiescence 应扩展该 check move 并递归;
+  // depth=1(<MIN)→ quiescence 不扩展,只 standPat。
+  // 用 mock 隔离:evaluateBoard / allLegalMoves / applyMoveToBoard / isInCheck 由测试控制。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    let recursed = 0;
+    let inCheckDepth2 = 0;
+    evaluateBoard = () => 0;
+    isInCheck = (board) => Boolean(board && board.check);
+    allLegalMoves = () => [
+      { pieceId: "rc", side: SIDES.RED, fromX: 4, fromY: 5, toX: 4, toY: 2, capturedPieceId: null },
+    ];
+    orderMoves = (_board, moves) => moves;
+    applyMoveToBoard = (_board, move) => {
+      recursed += 1;
+      // 模拟走完后:对方(black)将被将军 → childBoard.check = true
+      return { check: true, move };
+    };
+    pieceValueOnBoard = () => 0;
+    see = () => 0;
+
+    // depth=2,alpha=-Inf,beta=Inf:无 standPat cutoff,无 delta pruning(无 capture)
+    // 应该扩展 quiet check move 并递归
+    const scoreDepth2 = quiescence({}, SIDES.RED, -Infinity, Infinity, SIDES.RED, 2, Infinity);
+    inCheckDepth2 = recursed;
+    recursed = 0;
+    // depth=1:< QUIESCENCE_CHECK_MIN_DEPTH=2 → 不扩展 quiet check move
+    const scoreDepth1 = quiescence({}, SIDES.RED, -Infinity, Infinity, SIDES.RED, 1, Infinity);
+    return { inCheckDepth2, recursedDepth1: recursed, scoreDepth2, scoreDepth1 };
+  })()`);
+  assert.ok(result.inCheckDepth2 >= 1,
+    `depth=2: quiescence should recurse on quiet check move, got ${result.inCheckDepth2} recursions`);
+  assert.equal(result.recursedDepth1, 0,
+    `depth=1: quiescence should NOT extend quiet check move (< MIN_DEPTH=2), got ${result.recursedDepth1} recursions`);
+});
+
