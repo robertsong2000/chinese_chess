@@ -647,7 +647,7 @@
       "estimated_min": 30,
       "attempts": 1,
       "completed_at": "2026-08-08T18:29:34+08:00",
-      "commit_sha": "(pending)"
+      "commit_sha": "dde1556"
     }
   ],
   "history": [
@@ -927,7 +927,8 @@
       "todo_id": 35,
       "action": "completed",
       "summary": "#35 benchmark 扩展:TACTICS 数组(5 题:免费吃车/fork/防守吃将军/兵换马/残局车将军)+ runTactics + formatMarkdown,默认 4 → 8 局自对弈,TACTIC_DEADLINE_MS=300。结果:战术 5/5 通过(100% > 60%),自对弈 hard 0/4 normal 4/4 4 和(Phase 4 退化,deterministic,与 #31 baseline 已退化到 0.5 一致)。1 个契约回归测试,32/32 pass。Phase 4 全部 7/7 完成。退化分析记录在 docs/plans/benchmark-results.md。",
-      "commit_sha": "(pending)"
+      "commit_sha": "dde1556",
+      "full_commit_sha": "dde1556c0721bd66e15ba1ac256fe8c7cfe94717"
     }
   ],
   "rules": [
