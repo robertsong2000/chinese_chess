@@ -538,6 +538,17 @@ const TEMPO_BONUS = 15;
 const OPENING_MATERIAL_THRESHOLD = 3000;
 const CENTER_CANNON_OPENING_BONUS = 20;
 
+// #59 Pinned Piece Mobility Penalty:被绝对钉死的子(车-pin-将 / 炮架子-pin-将)
+// 其 mobility 应归零 —— 因为任何移动都会暴露将,rawMovesForPiece 计算了"伪合法"
+// 走法,但这些走法实际上全是非法的(走完会被判 isInCheck=true,search.js 中过滤)。
+// 经典评估中,被钉子的活动性应记 0,否则 AI 会高估被困子的活动空间。
+// 直接服务『中局战术组合能力』(准确识别 pin 战术价值)+ 『完全不送子』(不误估被钉子)。
+// 取值保守:enable=true / multiplier=1.0(归零),不允许负 multiplier。
+const PINNED_MOBILITY_PENALTY = {
+  enabled: true,
+  multiplier: 1.0, // 1.0 = 完全归零;0 = 关闭;不允许 < 0
+};
+
 const POSITION_BONUS = {
   general: [
     [0, 0, 0, 8, 12, 8, 0, 0, 0],

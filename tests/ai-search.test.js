@@ -2169,3 +2169,138 @@ test("#58 center cannon integration: evaluateBoard favors RED when only RED has 
     `evalRed - evalBlack should be >= 2*bonus(${2 * result.bonus}), got ${result.evalRed - result.evalBlack}`);
 });
 
+test("#59 Pinned Piece Mobility: constants configured for absolute pin detection", () => {
+  // 契约:PINNED_MOBILITY_PENALTY 默认 enabled,multiplier=1.0(归零)。
+  // multiplier 不允许负值(负值会变成加分,反向逻辑)。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    enabled: PINNED_MOBILITY_PENALTY.enabled,
+    multiplier: PINNED_MOBILITY_PENALTY.multiplier,
+  }))()`);
+  assert.equal(result.enabled, true, "PINNED_MOBILITY_PENALTY should be enabled by default");
+  assert.ok(result.multiplier >= 0 && result.multiplier <= 1.0,
+    `multiplier should be in [0, 1], got ${result.multiplier}`);
+});
+
+test("#59 findPinnedPieces: chariot pin identifies the pinned piece", () => {
+  // 战术结构:红车 (4,9) - 黑马 (4,5) - 黑将 (4,0) 共线,马被绝对 pin。
+  // 红将在 (3,9) 错列避免飞将限制。黑车放在 (0,0) 角落不参与战术。
+  // 期望:findPinnedPieces(board, BLACK) 包含 'bh'(马)。
+  //       findPinnedPieces(board, RED) 为空集(红方无 pin 结构)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 4, y: 9, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 4, y: 5, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 0, y: 0, alive: true },
+    ];
+    const pinnedBlack = findPinnedPieces(board, SIDES.BLACK);
+    const pinnedRed = findPinnedPieces(board, SIDES.RED);
+    return {
+      blackPinned: Array.from(pinnedBlack),
+      redPinned: Array.from(pinnedRed),
+      horsePinned: pinnedBlack.has('bh'),
+    };
+  })()`);
+  assert.equal(result.horsePinned, true,
+    `findPinnedPieces(BLACK) should contain 'bh' (horse pinned by chariot); got ${JSON.stringify(result.blackPinned)}`);
+  assert.equal(result.redPinned.length, 0,
+    `findPinnedPieces(RED) should be empty (no red piece is pinned); got ${JSON.stringify(result.redPinned)}`);
+});
+
+test("#59 findPinnedPieces: cannon pin (screen) identifies the pinned piece", () => {
+  // 炮型 pin:红炮 (3,9) - 黑马 (3,4)(炮架)- 黑将 (3,0) 共线,马是炮架,被绝对 pin。
+  // 红将 (4,9) 错列。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 3, y: 0, alive: true },
+      { id: 'rp', side: SIDES.RED, type: TYPES.CANNON, x: 3, y: 9, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 3, y: 4, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 0, y: 5, alive: true },
+    ];
+    const pinnedBlack = findPinnedPieces(board, SIDES.BLACK);
+    return {
+      blackPinned: Array.from(pinnedBlack),
+      horsePinned: pinnedBlack.has('bh'),
+    };
+  })()`);
+  assert.equal(result.horsePinned, true,
+    `findPinnedPieces(BLACK) should contain 'bh' (horse is cannon screen, absolutely pinned); got ${JSON.stringify(result.blackPinned)}`);
+});
+
+test("#59 evaluateBoard: pinned horse contributes zero mobility", () => {
+  // 关键契约:被绝对钉死的马,rawMovesForPiece 计算的伪合法走法不计入 mobility。
+  // 局面 A:红车 - 黑马 - 黑将 共线 → 黑马被 pin,mobility 贡献 = 0
+  // 局面 B:把红车挪到不同列 → 黑马不被 pin,mobility 贡献 > 0
+  // 评估差(A 比 B,黑方视角):A 中马 mobility=0;A 中红方 tacticBonus 加分(车 pin);
+  //   B 中马 mobility>0;B 中红方无 pin 加分。
+  // 关键断言:在 A 中,被 pin 马对 blackScore 的 mobility 贡献为 0。
+  // 简化断言:evaluateBoard 中,被 pin 马(黑) 对评估的"主动活动性贡献"为 0,
+  //   可通过比较"马的 rawMovesForPiece 数 * MOBILITY_VALUE.horse"是否 > 0 来反推。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    // 局面 A:马被绝对 pin
+    const boardA = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 4, y: 9, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 4, y: 5, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 0, y: 0, alive: true },
+    ];
+    // 局面 B:同结构,但红车移开 → 马不被 pin
+    const boardB = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 0, y: 9, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 4, y: 5, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 0, y: 0, alive: true },
+    ];
+    const pinnedA = findPinnedPieces(boardA, SIDES.BLACK);
+    const pinnedB = findPinnedPieces(boardB, SIDES.BLACK);
+    const horseRawMovesA = rawMovesForPiece(boardA, boardA.find(p => p.id === 'bh')).length;
+    const horseRawMovesB = rawMovesForPiece(boardB, boardB.find(p => p.id === 'bh')).length;
+    const mobilityPerMove = MOBILITY_VALUE.horse;
+    return {
+      pinnedA: Array.from(pinnedA),
+      pinnedB: Array.from(pinnedB),
+      horsePinnedA: pinnedA.has('bh'),
+      horsePinnedB: pinnedB.has('bh'),
+      horseRawMovesA,
+      horseRawMovesB,
+      mobilityPerMove,
+      // 黑方视角下,A vs B 评估差
+      evalABlack: evaluateBoard(boardA, SIDES.BLACK),
+      evalBBlack: evaluateBoard(boardB, SIDES.BLACK),
+    };
+  })()`);
+
+  // 契约 1:局面 A 马 rawMoves > 0(说明归零是 evaluateBoard 内的逻辑,不是 rawMoves 本身为 0)
+  assert.ok(result.horseRawMovesA > 0,
+    `Pinned horse rawMoves should be > 0 (rawMovesForPiece doesn't know about pin); got ${result.horseRawMovesA}`);
+  // 契约 2:局面 A 马被 pin
+  assert.equal(result.horsePinnedA, true,
+    `Horse in boardA should be pinned; got ${JSON.stringify(result.pinnedA)}`);
+  // 契约 3:局面 B 马不被 pin
+  assert.equal(result.horsePinnedB, false,
+    `Horse in boardB should NOT be pinned; got ${JSON.stringify(result.pinnedB)}`);
+  // 契约 4:局面 A vs B 评估差体现 mobility 归零 + 对方 tacticBonus pin 加分
+  //   A 中黑方:马 mobility 贡献 = 0(原本 > 0)
+  //   A 中红方:tacticBonus 加 pin 分(40+20=60,pin + pinHighValue)
+  //   B 中黑方:马 mobility 贡献 = horseRawMovesB * mobilityPerMove
+  //   B 中红方:无 pin 加分
+  //   evalABlack - evalBBlack = -马 mobility - 红方 tacticBonus
+  //   即 evalABlack < evalBBlack - mobilityContributionB
+  const mobilityContributionB = result.horseRawMovesB * result.mobilityPerMove;
+  assert.ok(mobilityContributionB > 0,
+    `Horse mobility contribution in boardB should be > 0; got ${mobilityContributionB}`);
+  assert.ok(
+    result.evalABlack < result.evalBBlack - mobilityContributionB + 1,
+    `evalA(black) should be < evalB(black) - ${mobilityContributionB} (mobility归零 + 对方 pin 加分); got A=${result.evalABlack}, B=${result.evalBBlack}`,
+  );
+});
+
+

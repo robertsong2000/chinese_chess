@@ -1164,10 +1164,69 @@ function quiescence(board, side, alpha, beta, aiSide, depth, deadline, legalMove
   return alpha;
 }
 
+// #59 找出 side 方被绝对钉死的子(任何移动都暴露将)。
+// 经典 pin 类型:
+//   (a) 车型 pin:敌方车 + 我方 P + 我方将 共线,P 在中间,中间无其他子 → P 被 pin
+//   (b) 炮型 pin:敌方炮 + 我方 P(炮架)+ 我方将 共线,P 是唯一炮架 → P 被 pin
+// 算法:从将出发沿 4 个直线方向扫描,找第一个我方非将棋子 P1,继续扫描到下一个棋子 P2;
+//       P2 是敌方车或炮 → P1 被 pin(其他类型 P2 不形成 pin)。
+// 复杂度:O(4 * board_size) ≈ O(N),evaluateBoard 内调用一次可接受。
+// 返回:Set<pieceId>。
+function findPinnedPieces(board, side) {
+  const pinned = new Set();
+  const general = board.find(
+    (p) => p.alive && p.side === side && p.type === TYPES.GENERAL,
+  );
+  if (!general) return pinned;
+  const enemy = opposite(side);
+  const dirs = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+  for (const [dx, dy] of dirs) {
+    let firstAlly = null;
+    let x = general.x + dx;
+    let y = general.y + dy;
+    while (inBoard(x, y)) {
+      const p = pieceAt(board, x, y);
+      if (p) {
+        if (!firstAlly) {
+          // 第一个棋子:必须是友方非将子(将不在此处,故 p.type !== GENERAL 隐含)
+          if (p.side === enemy) break; // 敌方先到,无 pin(可能是直接将军,与本函数无关)
+          firstAlly = p;
+        } else {
+          // 第二个棋子:决定 pin
+          if (
+            p.side === enemy &&
+            (p.type === TYPES.CHARIOT || p.type === TYPES.CANNON)
+          ) {
+            pinned.add(firstAlly.id);
+          }
+          break; // 任何类型都终止(再远不影响这条线的 pin)
+        }
+      }
+      x += dx;
+      y += dy;
+    }
+  }
+  return pinned;
+}
+
 function evaluateBoard(board, aiSide, side = null) {
   let score = 0;
   const controlMaps = buildControlMaps(board);
   const endgame = isEndgame(board);
+  // #59 Pinned mobility:预先计算双方被钉子的 id 集合,mobility 计算时跳过这些子。
+  const pinnedRed =
+    PINNED_MOBILITY_PENALTY && PINNED_MOBILITY_PENALTY.enabled
+      ? findPinnedPieces(board, SIDES.RED)
+      : new Set();
+  const pinnedBlack =
+    PINNED_MOBILITY_PENALTY && PINNED_MOBILITY_PENALTY.enabled
+      ? findPinnedPieces(board, SIDES.BLACK)
+      : new Set();
   // 按方统计车马炮存活数,用于成对组合加分
   const attackerCount = {
     [SIDES.RED]: { chariot: 0, cannon: 0, horse: 0 },
@@ -1182,8 +1241,19 @@ function evaluateBoard(board, aiSide, side = null) {
     const direction = piece.side === aiSide ? 1 : -1;
     let value = PIECE_VALUE[piece.type];
     value += positionalBonus(piece);
-    value += rawMovesForPiece(board, piece).length * (MOBILITY_VALUE[piece.type] || 0);
-    value += mobilityRefinementBonus(piece, board);
+    // #59:被绝对钉死的子 mobility 归零(任何移动都会暴露将,raw mobility 是无效活动性)
+    const pinnedSet = piece.side === SIDES.RED ? pinnedRed : pinnedBlack;
+    const isPinned = pinnedSet.has(piece.id);
+    if (
+      PINNED_MOBILITY_PENALTY &&
+      PINNED_MOBILITY_PENALTY.enabled &&
+      isPinned
+    ) {
+      // mobility 归零:不加 rawMovesForPiece * MOBILITY_VALUE,也不加 mobilityRefinementBonus
+    } else {
+      value += rawMovesForPiece(board, piece).length * (MOBILITY_VALUE[piece.type] || 0);
+      value += mobilityRefinementBonus(piece, board);
+    }
     const square = piece.y * 9 + piece.x;
     if (controlMaps[opposite(piece.side)].has(square)) value -= Math.min(140, value * 0.12);
     if (controlMaps[piece.side].has(square)) value += Math.min(70, value * 0.05);
