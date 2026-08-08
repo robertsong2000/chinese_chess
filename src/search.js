@@ -954,7 +954,133 @@ function evaluateBoard(board, aiSide) {
   // 王的安全(士象守卫 + 出宫惩罚 + 敌方近距离车炮威胁)
   score += kingSafetyScore(board, aiSide);
   score -= kingSafetyScore(board, opposite(aiSide));
+  // 战术模式检测:fork / pin / discovered attack
+  score += tacticBonus(board, aiSide);
+  score -= tacticBonus(board, opposite(aiSide));
   return score;
+}
+
+// 战术模式加分(fork / pin / discovered attack)。
+// 返回该 side 方获得的战术加分总和(我方威胁他方的战术价值)。
+// 直接服务"中局战术组合能力"目标 — 让 AI 在评估时识别战术结构,而非只看子力。
+function tacticBonus(board, side) {
+  if (!TACTIC_BONUS) return 0;
+  const enemy = opposite(side);
+  let total = 0;
+  const enemyGeneral = board.find((p) => p.alive && p.side === enemy && p.type === TYPES.GENERAL);
+  for (const piece of livePieces(board)) {
+    if (piece.side !== side) continue;
+    // Fork 检测:车/马/炮同时攻击 2+ 高价值敌方子,或 1 高价值 + 将军
+    if (piece.type === TYPES.CHARIOT || piece.type === TYPES.HORSE || piece.type === TYPES.CANNON) {
+      let highValueTargets = 0;
+      let generalThreatened = false;
+      for (const target of livePieces(board)) {
+        if (target.side !== enemy) continue;
+        if (!pieceAttacksSquare(board, piece, target.x, target.y)) continue;
+        if (target.type === TYPES.GENERAL) {
+          generalThreatened = true;
+        } else if (TACTIC_HIGH_VALUE_TYPES.indexOf(target.type) >= 0) {
+          highValueTargets += 1;
+        }
+      }
+      if (highValueTargets >= 2) {
+        total += TACTIC_BONUS.fork + (highValueTargets - 2) * TACTIC_BONUS.forkExtraTarget;
+      } else if (highValueTargets === 1 && generalThreatened) {
+        // 抽将型 fork:将军 + 攻击高价值子,对手必须解将
+        total += TACTIC_BONUS.fork;
+      }
+    }
+    // Pin / 炮架 检测:车或炮与敌方将共线,且中间恰好 1/2 个非将子
+    if ((piece.type === TYPES.CHARIOT || piece.type === TYPES.CANNON) && enemyGeneral) {
+      const onSameLine = piece.x === enemyGeneral.x || piece.y === enemyGeneral.y;
+      if (onSameLine) {
+        const between = [];
+        if (piece.x === enemyGeneral.x) {
+          const lo = Math.min(piece.y, enemyGeneral.y) + 1;
+          const hi = Math.max(piece.y, enemyGeneral.y);
+          for (let y = lo; y < hi; y += 1) {
+            const p = pieceAt(board, piece.x, y);
+            if (p) between.push(p);
+          }
+        } else {
+          const lo = Math.min(piece.x, enemyGeneral.x) + 1;
+          const hi = Math.max(piece.x, enemyGeneral.x);
+          for (let x = lo; x < hi; x += 1) {
+            const p = pieceAt(board, x, piece.y);
+            if (p) between.push(p);
+          }
+        }
+        if (piece.type === TYPES.CHARIOT && between.length === 1) {
+          // 车类型绝对 pin:对方非将子被钉(移动则暴露将)
+          const pinned = between[0];
+          if (pinned.side === enemy && pinned.type !== TYPES.GENERAL) {
+            total += TACTIC_BONUS.pin;
+            if (PIECE_VALUE[pinned.type] >= PIECE_VALUE[TYPES.HORSE]) {
+              total += TACTIC_BONUS.pinHighValue;
+            }
+          }
+        }
+        if (piece.type === TYPES.CANNON && between.length === 2) {
+          // 炮类型潜在 pin:2 子作架(其中至少 1 个敌方非将子),
+          // 任意一方移动都暴露将 → 战术约束
+          const hasEnemyNonGen = between.some(
+            (p) => p.side === enemy && p.type !== TYPES.GENERAL,
+          );
+          if (hasEnemyNonGen) {
+            total += TACTIC_BONUS.cannonPin;
+          }
+        }
+      }
+    }
+    // Discovered attack:X 移开暴露 A(车)对 H(高价值)的攻击
+    // 模式:X 沿某方向,反方向最近子是我方车,正方向最近子是敌方高价值/将,中间空
+    if (piece.type !== TYPES.GENERAL) {
+      const dirs = [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ];
+      for (let i = 0; i < dirs.length; i += 1) {
+        const dx = dirs[i][0];
+        const dy = dirs[i][1];
+        // 反方向找最近子 A
+        let A = null;
+        let cx = piece.x - dx;
+        let cy = piece.y - dy;
+        while (inBoard(cx, cy)) {
+          const p = pieceAt(board, cx, cy);
+          if (p) {
+            A = p;
+            break;
+          }
+          cx -= dx;
+          cy -= dy;
+        }
+        if (!A || A.side !== side || A.type !== TYPES.CHARIOT) continue;
+        // 正方向找最近子 H
+        let H = null;
+        cx = piece.x + dx;
+        cy = piece.y + dy;
+        while (inBoard(cx, cy)) {
+          const p = pieceAt(board, cx, cy);
+          if (p) {
+            H = p;
+            break;
+          }
+          cx += dx;
+          cy += dy;
+        }
+        if (!H || H.side !== enemy) continue;
+        const isHighValue = TACTIC_HIGH_VALUE_TYPES.indexOf(H.type) >= 0 || H.type === TYPES.GENERAL;
+        if (!isHighValue) continue;
+        // X 移开后,A(车)直接攻击 H
+        total += TACTIC_BONUS.discoveredAttack;
+        break; // 每个 piece 最多记 1 次(避免双向共线重复计)
+      }
+    }
+  }
+  return total;
 }
 
 // 残局阶段判定:每方非将子力 <= ENDGAME_MATERIAL_THRESHOLD 时为残局

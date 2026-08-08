@@ -482,3 +482,85 @@ test("IID: hard AI finds the free chariot capture from an unseen mid-game positi
     `black horse should take the free chariot at (4,4); got piece=${result.pieceId} to=(${result.toX},${result.toY})`,
   );
 });
+
+test("tactic bonus constants cover fork / pin / discovered attack within 30-80 range", () => {
+  // 契约:TACTIC_BONUS 每种战术加分 30-80(参考象棋子力分:兵 100 / 马 430 / 炮 450 / 车 900)。
+  // - fork=60:fork 是"一子同时威胁两个高价值子",典型获益 >= 1 minor piece,加分应明显高于位置分(约 1/7 马)
+  // - pin=40:pin 限制对方子行动,但本身不直接吃子,加分低于 fork
+  // - cannonPin=30:炮类型 pin 比 pin 弱(炮架可能被替换/移动),加分最低
+  // - pinHighValue=20:pin 高价值子(车/马/炮)额外加分,鼓励选 pin 目标
+  // - forkExtraTarget=15:fork 第 3+ 目标边际价值递减
+  // - discoveredAttack=35:discovered 比 fork 弱(需要 X 实际移开才生效),加分低于 fork
+  // TACTIC_HIGH_VALUE_TYPES 必须覆盖车/马/炮三类(士/象/兵不算"高价值战术目标")。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    fork: TACTIC_BONUS.fork,
+    pin: TACTIC_BONUS.pin,
+    cannonPin: TACTIC_BONUS.cannonPin,
+    pinHighValue: TACTIC_BONUS.pinHighValue,
+    forkExtraTarget: TACTIC_BONUS.forkExtraTarget,
+    discoveredAttack: TACTIC_BONUS.discoveredAttack,
+    highValueTypes: [...TACTIC_HIGH_VALUE_TYPES].sort(),
+  }))()`);
+  assert.equal(result.fork, 60, "fork bonus should be 60");
+  assert.equal(result.pin, 40, "pin bonus should be 40");
+  assert.equal(result.cannonPin, 30, "cannonPin bonus should be 30");
+  assert.equal(result.pinHighValue, 20, "pinHighValue bonus should be 20");
+  assert.equal(result.forkExtraTarget, 15, "forkExtraTarget bonus should be 15");
+  assert.equal(result.discoveredAttack, 35, "discoveredAttack bonus should be 35");
+  assert.deepEqual(
+    result.highValueTypes,
+    ["cannon", "chariot", "horse"],
+    "TACTIC_HIGH_VALUE_TYPES must cover chariot/horse/cannon",
+  );
+});
+
+test("tactic detection: horse fork scores higher than symmetric baseline", () => {
+  // 战术局面:黑马 (4,2) 走日同时攻击红车 (3,4) 与红炮 (5,4),
+  //   即马步 (4,2)→(3,4) 和 (4,2)→(5,4) 都成立 → fork。
+  // 子力对称:红方有 车+炮+马,黑方有 车+炮+马(各自总子力 1780)。
+  // 红方车/炮放在被 fork 位置;黑方车/炮放在角落不参与战术;红方马放角落不参与战术。
+  // 红将 (3,9) 与黑将 (4,0) 错列避免飞将。
+  // 期望:
+  //   1) tacticBonus(board, BLACK) >= 60(fork 基础加分)
+  //   2) tacticBonus(board, RED) == 0(红方子均不参与战术)
+  //   3) evaluateBoard(board, BLACK) > 0(子力对称 + fork 加分使黑方占优)
+  // 该测试不要求 AI 一步进入 fork 局面,只验证评估函数正确识别 fork 结构。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 3, y: 4, alive: true },
+      { id: 'rp', side: SIDES.RED, type: TYPES.CANNON, x: 5, y: 4, alive: true },
+      { id: 'rh', side: SIDES.RED, type: TYPES.HORSE, x: 0, y: 9, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 4, y: 2, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 8, y: 5, alive: true },
+      { id: 'bp', side: SIDES.BLACK, type: TYPES.CANNON, x: 8, y: 2, alive: true },
+    ];
+    const blackTactics = tacticBonus(board, SIDES.BLACK);
+    const redTactics = tacticBonus(board, SIDES.RED);
+    const evalBlack = evaluateBoard(board, SIDES.BLACK);
+    return {
+      blackTactics,
+      redTactics,
+      evalBlack,
+      forkRecognized: blackTactics >= 60,
+      asymmetric: blackTactics > redTactics,
+    };
+  })()`);
+  assert.equal(
+    result.forkRecognized,
+    true,
+    `tacticBonus(black) should be >= 60 (fork: horse attacks 2 high-value targets); got ${result.blackTactics}`,
+  );
+  assert.equal(
+    result.asymmetric,
+    true,
+    `black tactic bonus (${result.blackTactics}) should exceed red (${result.redTactics}) — red has no tactic here`,
+  );
+  assert.ok(
+    result.evalBlack > 0,
+    `evaluateBoard(board, BLACK) should be positive (symmetric material + black fork); got ${result.evalBlack}`,
+  );
+});

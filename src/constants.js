@@ -232,6 +232,21 @@ const ENDGAME_DEFENDER_PENALTY = 30;
 // 残局阶段:将军/抽将额外加分(鼓励主动进攻)
 const ENDGAME_CHECK_BONUS = 80;
 
+// 战术模式加分(fork / pin / discovered attack 检测)
+// 直接服务"中局战术组合能力(牵制、双击、闪击、抽将)"目标。
+// 参考象棋子力分:兵 100 / 马 430 / 炮 450 / 车 900。
+// fork/pin/discovered 每种 30-80,与 TODO 描述一致。
+const TACTIC_BONUS = {
+  fork: 60, // 攻击 2+ 高价值子,或 1 高价值子 + 将军(抽将型 fork)
+  forkExtraTarget: 15, // fork 第 3+ 个目标每个加
+  pin: 40, // 车类型 pin:对方非将子被钉(不能动,否则暴露将)
+  pinHighValue: 20, // pin 目标价值 >= 马(430)额外加分
+  cannonPin: 30, // 炮类型 pin:对方子作炮架,移动炮架即丢
+  discoveredAttack: 35, // 闪击:X 移开暴露 A(车)攻击 H(高价值)
+};
+// fork / discovered 检测的"高价值子"类型(车/马/炮)
+const TACTIC_HIGH_VALUE_TYPES = ["chariot", "horse", "cannon"];
+
 const MOBILITY_VALUE = {
   general: 0,
   advisor: 1,
