@@ -1129,7 +1129,7 @@
         "tests/ai-search.test.js"
       ],
       "completed_at": "2026-08-09T05:45:05.239324+08:00",
-      "commit_sha": "PENDING"
+      "commit_sha": "085d6ab596a55b63e38cef4f8ae735244c5bfcb9"
     },
     {
       "id": 59,
@@ -1611,7 +1611,7 @@
       "todo_id": 58,
       "action": "completed",
       "summary": "#58 Center Cannon Opening Bonus:constants.js 加 OPENING_MATERIAL_THRESHOLD=3000(isEndgame 镜像)+ CENTER_CANNON_OPENING_BONUS=20;search.js 加 isOpening(board) + centerCannonOpeningBonus(board, side)(炮在 x=4 + 红方 y=7/黑方 y=2 即\"炮二平五\"开局结构);evaluateBoard 在 !endgame 时双向相减;4 个测试覆盖:开局中炮加分 / 过河炮不加 / 残局守卫 / evaluateBoard 集成对称性。73/73 tests pass。Phase 12 进度 2/4。",
-      "commit_sha": "PENDING"
+      "commit_sha": "085d6ab596a55b63e38cef4f8ae735244c5bfcb9"
     }
   ],
   "rules": [
