@@ -7,8 +7,10 @@ const vm = require("node:vm");
 const WORKER_PATH = path.join(__dirname, "..", "ai-worker.js");
 const CONSTANTS_PATH = path.join(__dirname, "..", "src", "constants.js");
 const RULES_PATH = path.join(__dirname, "..", "src", "rules.js");
+const SEARCH_PATH = path.join(__dirname, "..", "src", "search.js");
 const CONSTANTS_SRC = fs.readFileSync(CONSTANTS_PATH, "utf8");
 const RULES_SRC = fs.readFileSync(RULES_PATH, "utf8");
+const SEARCH_SRC = fs.readFileSync(SEARCH_PATH, "utf8");
 
 // 加载 ai-worker.js 到沙箱,stub self.postMessage 让 worker 可向外发消息。
 // 返回 { sandbox, posted } — posted 是 worker 已发出的所有消息数组。
@@ -97,9 +99,10 @@ test("app.js exposes createAIWorker factory returning null when Worker is unavai
       querySelectorAll: () => [],
     },
   });
-  // constants.js 必须先注入,否则 app.js 顶层引用 SIDES 等会 ReferenceError。
+  // constants.js → rules.js → search.js 必须先注入,否则 app.js 顶层引用 SIDES / allLegalMoves / runAISearch 等会 ReferenceError。
   vm.runInContext(CONSTANTS_SRC, context, { filename: CONSTANTS_PATH });
   vm.runInContext(RULES_SRC, context, { filename: RULES_PATH });
+  vm.runInContext(SEARCH_SRC, context, { filename: SEARCH_PATH });
   vm.runInContext(source, context, { filename: APP_PATH });
 
   // Node 环境 typeof Worker === "undefined" → createAIWorker 应返回 null
@@ -132,6 +135,7 @@ test("app.js chooseAIMoveAsync falls back to sync chooseAIMove when Worker is un
   });
   vm.runInContext(CONSTANTS_SRC, context, { filename: CONSTANTS_PATH });
   vm.runInContext(RULES_SRC, context, { filename: RULES_PATH });
+  vm.runInContext(SEARCH_SRC, context, { filename: SEARCH_PATH });
   vm.runInContext(source, context, { filename: APP_PATH });
 
   const result = vm.runInContext(`
