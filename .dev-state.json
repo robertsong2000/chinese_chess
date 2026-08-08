@@ -32,7 +32,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 7,
+  "current_phase": 8,
   "phases": [
     {
       "id": 1,
@@ -88,9 +88,19 @@
     {
       "id": 7,
       "name": "棋力深度冲刺 V3(冲击一级棋士 2200 稳态 + 攻击性提升)",
+      "todo_count": 2,
+      "priority": "P0",
+      "rationale": "Phase 1-6 已建立完整 AI 引擎基础(开局库 + LMR + Null move + Killer + History + TT + SEE + Futility + Razoring + LMP + IID + PVS + Quiescence Delta + Check Extension + Countermove + 战术/残局识别)。Phase 7 继续经典深度优化:Countermove Heuristic(#44)、History Malus(#45)、Singular Extension 等待,目标 hard 在 self-play 中对 normal 形成 60%+ 胜率,棋力稳定在一级棋士(2200)。",
+      "status": "done",
+      "completed_at": "2026-08-08T23:48:52.237802+08:00"
+    },
+    {
+      "id": 8,
+      "name": "棋力深度冲刺 V4(冲击一级棋士 2200 稳态 - 经典深度优化补全)",
       "todo_count": 1,
       "priority": "P0",
-      "rationale": "Phase 1-6 已建立完整 AI 引擎基础(开局库 + LMR + Null move + Killer + History + TT + SEE + Futility + Razoring + LMP + IID + PVS + Quiescence Delta + Check Extension + 战术/残局识别)。Phase 7 继续经典深度优化:Countermove Heuristic、Singular Extension、TT depth-aware prefetch、扩展开局库等,目标 hard 在 self-play 中对 normal 形成 60%+ 胜率,棋力稳定在一级棋士(2200)。"
+      "rationale": "Phase 1-7 已完成所有经典启发式 + 评估精化 + 残局/战术识别。本阶段补全 Stockfish/Deep Blue 经典 Singular Extension(剩余的最后一种经典延伸),并继续探索后续深度优化(Threat Extension / TT move-first 改进 / Aspiration 重新启用等),目标 hard 在 self-play 中对 normal 形成 65%+ 胜率,棋力稳定在一级棋士(2200)。",
+      "status": "active"
     }
   ],
   "todos": [
@@ -829,6 +839,41 @@
       "attempts": 1,
       "completed_at": "2026-08-08T22:50:03.602014+08:00",
       "commit_sha": "2655094"
+    },
+    {
+      "id": 45,
+      "phase": 7,
+      "category": "棋力-搜索-启发",
+      "title": "History Malus(fail-low 走法减分)",
+      "description": "[本次完成 2026-08-08] 新增 penalizeHistory(history, move, depth),与 storeHistory 互补:cutoff 时 +(depth+1)^2 bonus,fail-low(score <= origAlpha)时 -(depth+1)^2/FACTOR malus。非对称设计(malus = bonus/2):对称会抹平 ordering 信号。HISTORY_MALUS_FACTOR=2 / HISTORY_MALUS_MIN_DEPTH=2(浅节点 fail-low 噪声大)。negamax move loop 内条件:i >= 1(首走法不惩罚)+ !isTactical + depth >= MIN + score <= origAlpha → penalizeHistory。直接服务'看 5-7 步':让 ordering 在多深度迭代中持续学习'哪些走法常失败',LMR/PVS 准确性提升 → 搜索深度自然延伸。50/50 测试通过(原 48 + 新增 2:常量契约 + 非对称行为 + 战术回归)。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 20,
+      "attempts": 1,
+      "completed_at": "2026-08-08T23:17:15+08:00",
+      "commit_sha": "35b351e"
+    },
+    {
+      "id": 46,
+      "phase": 8,
+      "category": "棋力-搜索",
+      "title": "Singular Extension(TT LOWER-bound 独招验证 + reduced-depth zero-window probe)",
+      "description": "经典 Stockfish/Deep Blue 选择性延伸:当 TT 中某走法是 LOWER bound entry(beta cutoff)+ depth >= 4 时,验证该走法是否'独招'(其他走法 score 都低于 ttScore - 60)。验证用 zero-window probe(reduced depth,excluded TT move),所有其他走法 fail-high → singular 成立 → 主搜索中该走法 +1 ply extension。与 check extension 共享 extensionsInLine 计数器,总延伸上限 = 3。验收:npm test 通过 + 战术题集 10/10 仍通过。预估 25 分钟。",
+      "files": [
+        "src/constants.js",
+        "src/search.js"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 25,
+      "attempts": 1,
+      "completed_at": "2026-08-08T23:48:52.237802+08:00",
+      "commit_sha": "bdfbb03"
     }
   ],
   "history": [
@@ -1179,6 +1224,21 @@
       "action": "completed",
       "summary": "#44 Countermove Heuristic: 新增 createCountermoveTable/storeCountermove,negamax cutoff 时记 (oppMove -> counterMove),moveOrdering 命中时 +6500;negamax/orderMoves/searchRootAtDepth 新增 counterMoves+lastOppMove 参数,递归传 move。48 测试全过 + 2 局 self-play 1 胜 1 和 0 输 + 战术 10/10 全过,无退化。",
       "commit_sha": "2655094"
+    },
+    {
+      "timestamp": "2026-08-08T23:17:15+08:00",
+      "todo_id": 45,
+      "action": "completed",
+      "summary": "#45 History Malus:penalizeHistory 函数(malus = bonus/FACTOR = (depth+1)^2/2)+ negamax 内 fail-low(score<=origAlpha)+ !isTactical + i>=1 + depth>=2 时调用。与 storeHistory(下方 cutoff 路径)互补:cutoff 加 bonus,fail-low 减 malus,让 ordering 持续学习。HISTORY_MALUS_FACTOR=2 / HISTORY_MALUS_MIN_DEPTH=2。50/50 测试通过(原 48 + 新增 2:常量契约 + 战术局面马吃无保护车回归)。",
+      "commit_sha": "35b351e",
+      "full_commit_sha": "35b351e8bb124784448708e0a2325b9b9a9ae1c7"
+    },
+    {
+      "timestamp": "2026-08-08T23:48:52.237802+08:00",
+      "todo_id": 46,
+      "action": "completed",
+      "summary": "#46 Singular Extension:TT LOWER-bound + ttEntry capture + reduced-depth zero-window probe(逐走法 excluded TT move 验证)。constants.js 加 5 个 SINGULAR_* 常量;search.js negamax 加 ttEntry 引用 + singular verification 块 + 主循环 isSingular extDepth/childExt。50/50 测试通过,战术 10/10 仍过。commit bdfbb03",
+      "commit_sha": "bdfbb03"
     }
   ],
   "rules": [
@@ -1190,5 +1250,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 6 全部 6/6 done(#38-43):quiescence delta pruning / LMP / TT replacement / mobility refinement / tactics 扩展 / killer+history 调优。棋力 ~1900-2000(二级棋士)。建议下一步:1) 跑长 benchmark (BENCH_LONG=1,默认 20 局)验证近期优化的 self-play 真实效果,看 hard vs normal 胜率是否突破 0.5; 2) 若仍 0.5,生成 Phase 7 TODO 聚焦 evaluation 精度(如 pawn structure / king attack zone)或 search depth(如 multi-threaded search / pondering);3) 用户对 Phase 4-6 退化定位+修复的累积成果可考虑 push 到 remote(gh 待 auth)。"
+  "next_run_hint": "Phase 7 已完成 2/2 (#44 Countermove + #45 History Malus)。建议下一步:1) 跑长 benchmark (BENCH_LONG=1, 20 局) 验证 #44+#45 的 self-play 真实效果,看 hard vs normal 胜率是否突破 0.5; 2) 生成 Phase 8 TODO,候选:Singular Extension (TT best move verify-search) / Verified NMP / Aspiration Window 重启(更宽 ±400 + 严格 re-search) / King Attack Zone eval; 3) 优先 Singular Extension — 经典 Stockfish 技术,在 TT 命中 LOWER 且 depth 足够时,verify-search 确认走法'独特性'后 +1 ply extension,直接服务'看 5-7 步'。"
 }
