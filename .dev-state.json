@@ -467,11 +467,11 @@
         ".github/PULL_REQUEST_TEMPLATE.md"
       ],
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 15,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T09:12:02+08:00",
+      "commit_sha": "75c9f59"
     },
     {
       "id": 21,
@@ -483,11 +483,11 @@
         "docker-compose.yml"
       ],
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 10,
-      "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "attempts": 1,
+      "completed_at": "2026-08-08T09:43:15+08:00",
+      "commit_sha": "d7c141e"
     },
     {
       "id": 22,
@@ -706,6 +706,20 @@
       "summary": "拆分 app.js 第 3 步:AI 搜索函数移到 src/search.js。开局库(OPENING_BOOK_*/getOpeningBookMove)、时间管理(allocateTimeFactor)、runAISearch、评估(evaluateBoard/isEndgame/endgameSoldierBonus/kingSafetyScore/positionalBonus/buildControlMaps)、搜索(negamax/quiescence)、走法排序(orderMoves/moveOrderingScore)、Killer/History/TT(computeZobrist/ttProbe/ttStore)、循环检测(capturedValue/canonicalBoardKey/positionKey/positionRepetitionCount/isDirectReversal/rootCyclePenalty/preferNonRepeatingMoves)、shuffle/pickEasyMove 等全部移出。app.js 仅保留 chooseAIMove / Worker 路径 / scheduleAI 等强 state/UI 代码。加载顺序 constants → rules → search → app;index.html / engine-harness.js / ai-worker-smoke.test.js 同步注入 search.js。15/15 测试通过,app.js 1658→831 行(-827),src/search.js 839 行。",
       "commit_sha": "9d94db1",
       "full_commit_sha": "9d94db12fdb267b1a5d6dfa949b3a9adc796b7fc"
+    },
+    {
+      "timestamp": "2026-08-08T09:12:02+08:00",
+      "todo_id": 20,
+      "action": "completed",
+      "summary": "加 Issue 模板:bug.md(规则/AI/UI + 难度与 Worker 字段)、feature.md(影响范围 + 棋力 Elo 影响字段)、PULL_REQUEST_TEMPLATE.md(自检清单含 npm test / benchmark / lint / Vanilla JS 零依赖)",
+      "commit_sha": "75c9f59"
+    },
+    {
+      "timestamp": "2026-08-08T09:43:15+08:00",
+      "todo_id": 21,
+      "action": "completed",
+      "summary": "docker-compose 加 healthcheck(wget --spider localhost:80,30s/3 retries)+ src/ 挂载(修复拆分后 src/*.js 404 隐患)+ init:true + logging 限制。docker compose config 通过,15/15 测试通过。",
+      "commit_sha": "d7c141e"
     }
   ],
   "rules": [
