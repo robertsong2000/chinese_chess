@@ -32,7 +32,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 8,
+  "current_phase": 9,
   "phases": [
     {
       "id": 1,
@@ -100,6 +100,15 @@
       "todo_count": 1,
       "priority": "P0",
       "rationale": "Phase 1-7 已完成所有经典启发式 + 评估精化 + 残局/战术识别。本阶段补全 Stockfish/Deep Blue 经典 Singular Extension(剩余的最后一种经典延伸),并继续探索后续深度优化(Threat Extension / TT move-first 改进 / Aspiration 重新启用等),目标 hard 在 self-play 中对 normal 形成 65%+ 胜率,棋力稳定在一级棋士(2200)。",
+      "status": "done",
+      "completed_at": "2026-08-09T00:00:00+08:00"
+    },
+    {
+      "id": 9,
+      "name": "棋力深度冲刺 V5(Verified NMP + 评估残局精化,稳定一级棋士 2200)",
+      "todo_count": 1,
+      "priority": "P0",
+      "rationale": "Phase 1-8 经典启发式全完成(开局库 + LMR + NMP + Killer + History + TT + SEE + Futility + Razoring + LMP + IID + PVS + Quiescence Delta + Check Extension + Countermove + Singular Extension)。本阶段加 Verified NMP(null move cutoff 用 reduced real search 复核,防止残局 zugzwang 与战术误判),目标 hard 在 self-play 中对 normal 形成稳定 65%+ 胜率。",
       "status": "active"
     }
   ],
@@ -874,6 +883,25 @@
       "attempts": 1,
       "completed_at": "2026-08-08T23:48:52.237802+08:00",
       "commit_sha": "bdfbb03"
+    },
+    {
+      "id": 47,
+      "phase": 9,
+      "category": "棋力-搜索",
+      "title": "Verified NMP(null move cutoff 用 reduced real search 复核)",
+      "description": "[本次完成 2026-08-09] Verified NMP(经典 Stockfish 技术):null move 触发 cutoff(nullScore>=beta)时,若 depth>=NULL_MOVE_VERIFY_MIN_DEPTH(=5),做一次同 side reduced real-move search(depth-1-NULL_MOVE_VERIFY_REDUCTION=1,zero-window beta-1,beta)复核。verifyScore>=beta 才确认 cutoff,否则 fall-through 到完整搜索。防止 NMP 经典 bug:1) 残局 zugzwang(让一步比走一步好);2) hidden tactical refutation(reduced null 搜索深度不够看不到)。verify 内部 depth=depth-2 < VERIFY_MIN=5,无递归。2 个回归测试(常量契约+递归安全 / 残局 endgame 战术局面车吃车不退化)。52/52 测试通过(原 50 + 新增 2)。Self-play 2 局 hardWinRate=0.5 与 Phase 7/8 baseline 一致,无退化。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 25,
+      "attempts": 1,
+      "completed_at": "2026-08-09T00:22:23+08:00",
+      "commit_sha": "24fff88",
+      "full_commit_sha": "24fff882259782040a6195be931d30c5ae5456e2"
     }
   ],
   "history": [
@@ -1239,6 +1267,14 @@
       "action": "completed",
       "summary": "#46 Singular Extension:TT LOWER-bound + ttEntry capture + reduced-depth zero-window probe(逐走法 excluded TT move 验证)。constants.js 加 5 个 SINGULAR_* 常量;search.js negamax 加 ttEntry 引用 + singular verification 块 + 主循环 isSingular extDepth/childExt。50/50 测试通过,战术 10/10 仍过。commit bdfbb03",
       "commit_sha": "bdfbb03"
+    },
+    {
+      "timestamp": "2026-08-09T00:22:23+08:00",
+      "todo_id": 47,
+      "action": "completed",
+      "summary": "#47 Verified NMP:nullScore>=beta + depth>=5 时用 reduced real search(depth-1-1,zero-window)复核,verifyScore>=beta 才确认 cutoff。防残局 zugzwang + hidden tactical refutation。verify 内部 depth=depth-2 < VERIFY_MIN=5 防递归。2 个新测试(常量+递归安全 / endgame 战术局面),52/52 pass。Self-play 2 局 hardWinRate=0.5(hard 执红胜 / hard 执黑输),与 baseline 一致无退化。",
+      "commit_sha": "24fff88",
+      "full_commit_sha": "24fff882259782040a6195be931d30c5ae5456e2"
     }
   ],
   "rules": [
@@ -1250,5 +1286,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 7 已完成 2/2 (#44 Countermove + #45 History Malus)。建议下一步:1) 跑长 benchmark (BENCH_LONG=1, 20 局) 验证 #44+#45 的 self-play 真实效果,看 hard vs normal 胜率是否突破 0.5; 2) 生成 Phase 8 TODO,候选:Singular Extension (TT best move verify-search) / Verified NMP / Aspiration Window 重启(更宽 ±400 + 严格 re-search) / King Attack Zone eval; 3) 优先 Singular Extension — 经典 Stockfish 技术,在 TT 命中 LOWER 且 depth 足够时,verify-search 确认走法'独特性'后 +1 ply extension,直接服务'看 5-7 步'。"
+  "next_run_hint": "Phase 9 启动,#47 Verified NMP 完成。建议下一步:1) 跑长 benchmark (BENCH_LONG=1, 20 局) 验证 #47 真实效果(endgame 阶段胜率是否提升);2) 生成 Phase 9 续 TODO,候选:Threat Extension (基于对手威胁的延伸) / Aspiration Window 重新启用(更宽 ±300 + 严格 re-search,验证之前 #37 退化定位是否仍成立) / King Attack Zone eval(评估对方将的安全 + 攻击方多子聚集宫 bonus) / TT move depth-preferred probe ordering(改进 TT 命中时的 ordering);3) 优先 Threat Extension — 经典 Stockfish 技术,当 null move 失败时(nullScore<beta-某阈值),说明对手有威胁,该对手威胁走法可获 +1 ply extension,直接服务\"看 5-7 步\"。"
 }
