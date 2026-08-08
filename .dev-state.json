@@ -32,7 +32,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 4,
+  "current_phase": 5,
   "phases": [
     {
       "id": 1,
@@ -68,6 +68,13 @@
       "todo_count": 7,
       "priority": "P0",
       "rationale": "Phase 1/1.5 已建立完整 AI 引擎基础,本阶段做经典深度优化(check/aspiration/futility/IID)+ 战术/残局识别,把棋力推到一级棋士"
+    },
+    {
+      "id": 5,
+      "name": "棋力退化定位 + 深度优化(冲击一级棋士 2200)",
+      "todo_count": 1,
+      "priority": "P0",
+      "rationale": "Phase 4 完成后发现 self-play 退化,#36 定位 + 修复 ENDGAME_PATTERN_BONUS;后续推进 #30 baseline 退化 + 战术/深度继续优化"
     }
   ],
   "todos": [
@@ -648,6 +655,25 @@
       "attempts": 1,
       "completed_at": "2026-08-08T18:29:34+08:00",
       "commit_sha": "dde1556"
+    },
+    {
+      "id": 36,
+      "phase": 5,
+      "category": "棋力-退化定位",
+      "title": "Phase 4 self-play 退化定位 + 最小修复(ENDGAME_PATTERN_BONUS)",
+      "description": "[本次完成 2026-08-08] Phase 4 完成后 hard self-play 胜率从 100% 退化到 0%(deterministic 模式)。消融实验定位元凶:ENDGAME_PATTERN_BONUS(#34)置 0 后 hardWinRate 0% → 50%。根因:(1) 幅度过大(原 500 ≈ 半个马);(2) 缺 isEndgame 阶段守卫,中局也可能触发。修复:幅度降到 ~40%(200/200/200/120/80)+ endgamePatternBonus 加 isEndgame 守卫。33/33 测试通过(新增 1 个中局守卫回归测试)。hard 执红从\"必 stalemate\"变成\"必 checkmate 胜\"。残留:hard 执黑仍输 normal 执红(#30 baseline 退化,未在本 TODO 范围)。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js",
+        "docs/plans/benchmark-results.md"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 25,
+      "attempts": 1,
+      "completed_at": "2026-08-08T18:55:03+08:00",
+      "commit_sha": "aeef07c"
     }
   ],
   "history": [
@@ -929,6 +955,14 @@
       "summary": "#35 benchmark 扩展:TACTICS 数组(5 题:免费吃车/fork/防守吃将军/兵换马/残局车将军)+ runTactics + formatMarkdown,默认 4 → 8 局自对弈,TACTIC_DEADLINE_MS=300。结果:战术 5/5 通过(100% > 60%),自对弈 hard 0/4 normal 4/4 4 和(Phase 4 退化,deterministic,与 #31 baseline 已退化到 0.5 一致)。1 个契约回归测试,32/32 pass。Phase 4 全部 7/7 完成。退化分析记录在 docs/plans/benchmark-results.md。",
       "commit_sha": "dde1556",
       "full_commit_sha": "dde1556c0721bd66e15ba1ac256fe8c7cfe94717"
+    },
+    {
+      "timestamp": "2026-08-08T18:55:03+08:00",
+      "todo_id": 36,
+      "action": "completed",
+      "summary": "Phase 5 退化定位 + 修复:消融实验找出 ENDGAME_PATTERN_BONUS 是 Phase 4 self-play 退化元凶(置 0 后 hardWinRate 0% → 50%)。修复:(1) 幅度降到原值 ~40%(200/200/200/120/80);(2) endgamePatternBonus 加 isEndgame 守卫防止中局触发。33/33 测试通过(新增 1 个中局守卫回归测试)。hard 执红从必 stalemate 变成必 checkmate 胜。残留 hard 执黑输 normal(#30 baseline 退化)留给下一个 TODO。",
+      "commit_sha": "aeef07c",
+      "full_commit_sha": "aeef07c"
     }
   ],
   "rules": [
@@ -940,5 +974,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 4 全部 7/7 TODO 完成(#29-#35)。当前状态:32/32 测试通过,战术 100% 通过,但 hard 自对弈退化到 0%(baseline #30 已退化到 50%,Phase 4 进一步退化)。建议 Phase 5 优先做:(1) 退化定位 — 二分 commit 二分 #29-#34 哪个引入退化;(2) 修复后再做深度优化(如 LMR 深化 / 更精确 SEE / 残局 tablebase);(3) 加入更多战术题(>= 10 题)和 longer self-play(>= 20 局)以提置信度。用户决定是否进入 Phase 5 或先 push 现有成果。"
+  "next_run_hint": "Phase 5 #36 完成(退化定位 + 修复 ENDGAME_PATTERN_BONUS,hardWinRate 0% → 50%)。建议下一个 TODO 优先:(1) 定位 hard 执黑输 normal 的 #30 baseline 退化 — 二分 #29 vs #30 commit 跑缩减 benchmark,验证 Aspiration Window / Root PVS 是否引入退化;(2) 修复后再做更深优化(LMR 深化、更精确 SEE、更多战术题 >=10、longer self-play >= 20 局提置信度);(3) 当前棋力 ~1900-2000(二级棋士),距离一级棋士 2200 还差 200-300 Elo。"
 }
