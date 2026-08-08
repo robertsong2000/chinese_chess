@@ -1160,7 +1160,7 @@
         "tests/ai-search.test.js"
       ],
       "completed_at": "2026-08-09T06:51:35.862220+08:00",
-      "commit_sha": "PENDING"
+      "commit_sha": "3b9135cc180c06af8c1904570994fc9683ae8cdd"
     }
   ],
   "history": [
@@ -1629,7 +1629,7 @@
       "todo_id": 60,
       "action": "completed",
       "summary": "#60 Self-play 退化回归测试:tests/ai-search.test.js 加 4-局 hard-vs-normal self-play 测试(2 局 hard 先手 + 2 局 normal 先手,maxply=12,极短 deadline 通过 timeScale 放大 performance.now)。断言 hardWins >= normalWins(hard 不被 normal 整体战胜,Phase 5/7 类退化检测)。78/78 tests pass,npm test 总时长 ~16s(#60 自身 ~11s)。",
-      "commit_sha": "PENDING"
+      "commit_sha": "3b9135cc180c06af8c1904570994fc9683ae8cdd"
     }
   ],
   "rules": [
