@@ -32,7 +32,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 10,
+  "current_phase": 11,
   "phases": [
     {
       "id": 1,
@@ -118,6 +118,14 @@
       "todo_count": 3,
       "priority": "P0",
       "rationale": "Phase 1-9 经典启发式与战术评估全完成,V5 加 Verified NMP + Threat Extension + King Attack Zone eval。本阶段从'评估精度'维度继续推进:扩展 endgamePatternBonus(经典必胜残局模式)、Soldier 推进精化、可选的 Piece-Square Table 精化。目标 hard 在 self-play 中对 normal 形成稳定 65%+ 胜率,残局阶段决策更精准。",
+      "status": "active"
+    },
+    {
+      "id": 11,
+      "name": "棋力深度冲刺 V7(quiescence 战术补强 + 评估精化,稳定一级棋士 2200)",
+      "todo_count": 1,
+      "priority": "P0",
+      "rationale": "Phase 1-10 经典启发式与战术评估全完成,V6 完成 TT mate score 距离调整。本阶段从'quiescence 战术识别'维度继续推进:扩展 quiescence 在 !inCheck 时搜能给将军的 quiet 走法(quiescence checks),识别'将军-抽将/抽子'战术组合。目标 hard 在 self-play 中维持稳定 65%+ 胜率,quiescence 不再漏看 forced check 战术。",
       "status": "active"
     }
   ],
@@ -994,9 +1002,28 @@
         "src/search.js"
       ],
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 20,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-09T02:45:38.976605+08:00",
+      "commit_sha": "acf0a786560d7adaee1cce0f1731e481cb285e66"
+    },
+    {
+      "id": 53,
+      "phase": 11,
+      "title": "Quiescence Check Move Extension(扩展能给将军的 quiet 走法,识别将军-抽将战术)",
+      "description": "经典 Stockfish quiescence 在 !inCheck + depth >= MIN 时扩展能给将军的 quiet 走法(quiescence checks),识别'将军-抽将/抽子'战术组合。中国象棋中将军-抽将是常见战术,原 quiescence 只搜 capture 会漏看。实现:1) constants 加 QUIESCENCE_CHECK_ENABLED/MIN_DEPTH=2/MAX_MOVES=3;2) quiescence 在 !inCheck + depth>=MIN 时,过滤非 capture 走法 + applyMoveToBoard+isInCheck 检测,前 K 个加入 candidateMoves(captures 之后);3) 直接服务'完全不送子'+ '中局战术组合能力'。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 20,
+      "attempts": 1,
+      "completed_at": "2026-08-09T03:17:39+08:00",
+      "commit_sha": "cb10f1601dbfe6f04f8b73d8ad95dbfa87fc7404"
     }
   ],
   "history": [
@@ -1401,6 +1428,21 @@
       "summary": "#51 Soldier 推进评估精化: 新增 endgameSoldierCenterBonus(piece) 给过河兵在敌宫中心列(x=4)+12 / 侧列(x=3,5)+6 加分;endgameSoldierCoordinationBonus(board, side) 按 pair 计数同列/同行/相邻双过河兵每对 +22(残局必胜结构)。evaluateBoard per-piece loop 加 center bonus,末尾加 endgame 双向 coordination bonus(对称守卫)。常量 ENDGAME_SOLDIER_CENTER_BONUS={center:12, edge:6} / ENDGAME_DOUBLE_SOLDIER_BONUS=22。与 #49 KING_ATTACK.soldierInPalace 互补(#49 无中心区分)。取值保守避免 #36/#37 self-play 退化。58/58 测试通过(原 56 + 新增 2:常量契约 + 战术局面双兵同列协同)。",
       "commit_sha": "8ce551f",
       "full_commit_sha": "8ce551f7d32f66b560856657c476c5cff367424a"
+    },
+    {
+      "timestamp": "2026-08-09T02:45:38.976605+08:00",
+      "todo_id": 52,
+      "action": "completed",
+      "summary": "#52 TT mate score 距离调整:constants 加 MATE_THRESHOLD=MATE-1000;search.js 加 ttScoreAdjustStore/Probe(SF-style ±ply 偏移);ttStore/ttProbe 签名加 ply,7 个 callsite 传入;2 新测试覆盖 winning/losing mate + 同/深/浅 ply + 非 mate 不变;60/60 pass",
+      "commit_sha": "acf0a786560d7adaee1cce0f1731e481cb285e66"
+    },
+    {
+      "timestamp": "2026-08-09T03:17:39+08:00",
+      "todo_id": 53,
+      "action": "completed",
+      "summary": "#53 Quiescence Check Move Extension: constants 加 QUIESCENCE_CHECK_ENABLED/MIN_DEPTH=2/MAX_MOVES=3; quiescence 在 !inCheck + depth>=MIN 时,过滤非 capture 走法 + applyMoveToBoard+isInCheck 检测, 前 K 个加入 candidateMoves(在 captures 之后)。直接识别'将军-抽将/抽子'战术组合,服务'完全不送子'+ '中局战术组合能力'。 2 新测试:常量契约 + depth>=MIN 扩展、<MIN 不扩展。62/62 通过(原 60 + 新增 2)。",
+      "commit_sha": "cb10f16",
+      "full_commit_sha": "cb10f1601dbfe6f04f8b73d8ad95dbfa87fc7404"
     }
   ],
   "rules": [
@@ -1412,5 +1454,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 9 #49 King Attack Zone eval 完成。建议下一步:1) 跑长 benchmark (BENCH_LONG=1, 20 局) 验证 #49 真实效果(king attack zone 是否提升 hardWinRate / 鼓励主动进攻);2) 生成 Phase 9 续 TODO,候选:(a) TT move depth-preferred probe ordering(改进 TT 命中时的 ordering 走法探测,提升深度);(b) Aspiration Window 重新启用验证(更宽 ±300 + 严格 re-search,验证 #37 退化定位是否仍成立);(c) Razoring 重新启用(在 #41/#49 评估精度提升后,严格条件 + 大 MARGIN);(d) Pawn structure eval(兵结构评估:连兵 / 孤兵 / 落后兵,服务残局);(e) Multi-threaded search(未来 Worker 化);3) 优先 (a) TT move depth-preferred probe — 直接服务『看 5-7 步』,提升 ordering 质量与搜索效率。"
+  "next_run_hint": "Phase 11 #53 Quiescence Check Move Extension 完成。建议下一步:1) 跑长 benchmark (BENCH_LONG=1, 20 局) 验证 #53 真实效果(quiescence checks 是否提升 hardWinRate / 帮助识别 forced check 战术);2) 生成 Phase 11 续 TODO,候选:(a) 跨回合 TT 复用(chooseAIMove 跨 move 保留 TT,直接 +1 ply 搜索深度,需重构 chooseAIMove);(b) Aspiration Window 重新启用验证(评估精度提升后,严格条件 + 大窗口 ±300 + widen re-search);(c) Razoring 重新启用(#41/#49/#51 评估精度提升后,严格条件 + 大 MARGIN);(d) Pawn structure eval(兵结构:连兵 / 双兵同列纵向协同,服务残局必胜);(e) Horse leg detection eval(马腿被堵的马减分,服务 mobility 精度);(f) Cannon screen stability eval(炮架稳定性:炮架易被吃时炮威胁减分);3) 优先 (a) 跨回合 TT 复用 — 直接服务'看 5-7 步',搜索深度 +1 ply 是棋力提升的关键瓶颈。"
 }
