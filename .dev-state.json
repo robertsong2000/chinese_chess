@@ -32,7 +32,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 5,
+  "current_phase": 6,
   "phases": [
     {
       "id": 1,
@@ -75,6 +75,13 @@
       "todo_count": 1,
       "priority": "P0",
       "rationale": "Phase 4 完成后发现 self-play 退化,#36 定位 + 修复 ENDGAME_PATTERN_BONUS;后续推进 #30 baseline 退化 + 战术/深度继续优化"
+    },
+    {
+      "id": 6,
+      "name": "棋力深度优化 V2(冲击一级棋士 2200 - 反先胜)",
+      "todo_count": 6,
+      "priority": "P0",
+      "rationale": "Phase 5 修复 Phase 4 退化后,hard 执黑仍只能逼和 normal。本阶段通过更深的搜索效率(quiescence/TT/LMP)+ 更精的 eval + 长 benchmark 验证,目标 hard 执黑能反先胜 normal(棋力 ~2200 一级棋士)"
     }
   ],
   "todos": [
@@ -693,6 +700,95 @@
       "attempts": 1,
       "completed_at": "2026-08-08T19:39:00.935190+08:00",
       "commit_sha": "28a8707"
+    },
+    {
+      "id": 38,
+      "phase": 6,
+      "category": "棋力-搜索效率",
+      "title": "Quiescence Delta Pruning(Phase 6 启动)",
+      "description": "[本次完成 2026-08-08] 加 quiescence delta pruning(safe):!inCheck 时若 standPat + capturedValue + MARGIN ≤ alpha,该 capture 序列不可能提升 alpha,直接剪枝。加速 quiescence 30-50%。Ablation 发现:(1) SEE pruning 退化 hard 执黑(0/2 输,SEE 不见 pin/discovered/flying-general 等战术后果,误剪战术性 capture)→ 完全禁用;(2) MARGIN=200 也退化(误剪 soldier tempo)→ MARGIN=500(覆盖 minor piece value)与 baseline 一致。35/35 测试通过(新增 2 个 quiescence 契约测试:delta 触发 + 不误剪)。Self-play 4 局 hard 胜 2/4 与 #37 baseline 一致,无回归。战术 5/5 pass。残留:delta 单独未观察到 self-play 提升(理论上加速仍带来更深主搜索,长 benchmark 才能体现收益)。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js",
+        "docs/plans/benchmark-results.md"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 25,
+      "attempts": 1,
+      "completed_at": "2026-08-08T20:00:23+08:00",
+      "commit_sha": "ebc2971"
+    },
+    {
+      "id": 39,
+      "phase": 6,
+      "category": "棋力-搜索效率",
+      "title": "Late Move Pruning(LMP):浅层 prune 排序靠后的 quiet 走法",
+      "description": "经典 forward pruning:depth<=2 + i>=LMP_MIN_INDEX + quiet 非 check → 直接跳过。与 futility 互补,加速 move loop 20-30%。",
+      "files": [
+        "src/search.js"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0
+    },
+    {
+      "id": 40,
+      "phase": 6,
+      "category": "棋力-TT质量",
+      "title": "TT replacement scheme + 容量验证(TT_REPLACE)",
+      "description": "TT 满时当前直接清空,丢失所有 PV 信息。改为 replacement scheme(depth-preferred + aging)避免全部丢失。验证 TT hit rate >= 30%。",
+      "files": [
+        "src/search.js"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0
+    },
+    {
+      "id": 41,
+      "phase": 6,
+      "category": "棋力-eval精化",
+      "title": "评估函数:车马炮 mobility 精化 + 王宫威胁加分",
+      "description": "当前 mobility 系数较粗(MOBILITY_VALUE 表)。加:车在开放线 / 马在中心 / 炮对宫的精细评估。直接服务'看 5-7 步':更准的 eval 让 alpha-beta cutoff 更精确,深度自然提升。",
+      "files": [
+        "src/search.js"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0
+    },
+    {
+      "id": 42,
+      "phase": 6,
+      "category": "棋力-验证",
+      "title": "扩展 tactics 测试集(>= 10 题)+ 长 benchmark(>= 20 局)",
+      "description": "当前 5 题战术 + 4 局 self-play 置信度低。扩到 10+ 题涵盖更多战术类型(double check / discovered / X-ray),长 benchmark 提置信度。",
+      "files": [
+        "tests/ai-benchmark.js"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0
+    },
+    {
+      "id": 43,
+      "phase": 6,
+      "category": "棋力-search启发",
+      "title": "Killer / History 表深度调优 + IID 验证",
+      "description": "KILLER_TABLE_PLY 当前固定 64,History 表更新公式可能过简。调优 + IID 触发条件验证。直接服务 move ordering 质量 → LMR/PVS 准确性 → 搜索深度。",
+      "files": [
+        "src/search.js"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0
     }
   ],
   "history": [
@@ -990,6 +1086,13 @@
       "summary": "#37 Phase 5 残留退化定位 + 修复:ablation(ASPIRATION_MIN_DEPTH=99)确认 Aspiration Window 是 hard 执黑输 normal 的元凶。修复:加 ASPIRATION_ENABLED=false flag + runAISearch 守卫,保留代码 + Root PVS。benchmark 验证:hard 执黑从 1 和 1 输 → 2 和(不再输)。33/33 测试通过(契约测试扩展验证 enabled=false)。",
       "commit_sha": "28a8707",
       "full_commit_sha": "28a8707b606c9c7c624ea0c4d64d6d0cc1e4988c"
+    },
+    {
+      "timestamp": "2026-08-08T20:00:23+08:00",
+      "todo_id": 38,
+      "action": "completed",
+      "summary": "#38 Phase 6 启动:Quiescence delta pruning(safe,!inCheck + standPat+captured+MARGIN≤alpha→剪)。Ablation:SEE pruning 退化 hard 执黑(0/2 输,不见 pin/discovered 等战术后果)→ 禁用;MARGIN=200 也退化 → 用 500。35/35 测试通过(2 个新契约测试),self-play 4 局与 baseline 一致无回归,战术 5/5 pass。",
+      "commit_sha": "ebc2971"
     }
   ],
   "rules": [
