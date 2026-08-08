@@ -668,8 +668,19 @@ function ttProbe(tt, hash, depth, alpha, beta) {
 function ttStore(tt, hash, depth, score, flag, bestMoveKey) {
   const existing = tt.get(hash);
   if (existing && existing.depth > depth) return;
-  if (tt.size >= TT_MAX_ENTRIES) tt.clear();
+  if (tt.size >= TT_MAX_ENTRIES) ttEvictShallow(tt);
   tt.set(hash, { depth, score, flag, bestMoveKey });
+}
+
+// depth-preferred partial eviction:TT 满时按 depth 升序,删除最浅的 TT_EVICT_RATIO 比例条目。
+// 与全清相比,保留 75% 深条目 → PV / TT best move 信息不被破坏 → 下一深度迭代仍可命中。
+// 单次代价:O(N log N) 排序(N=TT_MAX_ENTRIES);触发频率:每 ~TT_MAX_ENTRIES*TT_EVICT_RATIO 次新存入一次,
+// 摊销到每次 ttStore 约 1us,远小于一次 negamax 节点的开销。
+function ttEvictShallow(tt) {
+  const entries = Array.from(tt.entries());
+  entries.sort((a, b) => a[1].depth - b[1].depth);
+  const evict = Math.floor(entries.length * TT_EVICT_RATIO);
+  for (let i = 0; i < evict; i++) tt.delete(entries[i][0]);
 }
 
 function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = Infinity, ply = 0, killers = null, history = null, allowNull = true, extensionsInLine = 0, iidAllowed = true) {

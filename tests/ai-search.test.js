@@ -795,3 +795,79 @@ test("#39 LMP: hard AI still finds the free horse capture in shallow search tact
     `hard AI should capture the free horse despite LMP; got pieceId=${result.pieceId} toX=${result.toX} toY=${result.toY}`,
   );
 });
+
+test("#40 TT replacement scheme constants configured for depth-preferred partial eviction", () => {
+  // 契约:
+  // - TT_MAX_ENTRIES=200000:容量上限(同前),满则触发 eviction 而非 clear()。
+  // - TT_EVICT_RATIO=0.25:depth-preferred partial eviction 比例,留 75% 深条目。
+  //   太低(如 0.05)→ eviction 频繁,O(N log N) 排序开销重;
+  //   太高(如 0.75)→ 一次清太多,PV 信息丢失。
+  //   0.25 是经典引擎 "replace 1/4 of bucket" 的折衷值。
+  // - 关键不变量:ttStore 不再调用 tt.clear(),保留 PV/EXACT 条目跨 iterative deepening。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    maxEntries: TT_MAX_ENTRIES,
+    evictRatio: TT_EVICT_RATIO,
+    hasEvictFn: typeof ttEvictShallow === "function",
+    ttStoreSrc: ttStore.toString(),
+  }))()`);
+  assert.equal(result.maxEntries, 200000, "TT_MAX_ENTRIES should stay at 200000");
+  assert.ok(result.evictRatio >= 0.1 && result.evictRatio <= 0.5,
+    `TT_EVICT_RATIO should be in [0.1, 0.5], got ${result.evictRatio}`);
+  assert.equal(result.hasEvictFn, true, "ttEvictShallow must be defined");
+  assert.ok(result.ttStoreSrc.includes("ttEvictShallow"),
+    "ttStore must call ttEvictShallow (not tt.clear) when full");
+  assert.ok(!result.ttStoreSrc.includes("tt.clear()"),
+    "ttStore must NOT call tt.clear() (would discard all PV info)");
+});
+
+test("#40 ttEvictShallow keeps deep entries and drops shallowest (depth-preferred)", () => {
+  // 行为契约:
+  // - 塞 10 个 entry,depth 1..10
+  // - ttEvictShallow(tt) 删 floor(10 * 0.25) = 2 个最浅 → 剩 8 个
+  // - 删除的应是 depth=1 和 depth=2(浅)
+  // - 保留的应是 depth=3..10(深),包括 PV/EXACT 信息
+  // 这覆盖了 TT 满时 replacement 的核心保证:不全清,深条目留任。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const tt = createTranspositionTable();
+    for (let d = 1; d <= 10; d++) {
+      // 用 d 当 hash(测试内 hash 唯一即可);flag=EXACT 模拟 PV 条目
+      tt.set(d, { depth: d, score: d * 10, flag: TT_FLAG_EXACT, bestMoveKey: "k" + d });
+    }
+    const beforeSize = tt.size;
+    ttEvictShallow(tt);
+    const afterSize = tt.size;
+    const survivingDepths = [];
+    for (let d = 1; d <= 10; d++) {
+      if (tt.has(d)) survivingDepths.push(d);
+    }
+    return { beforeSize, afterSize, survivingDepths, evictRatio: TT_EVICT_RATIO };
+  })()`);
+  assert.equal(result.beforeSize, 10, "TT seeded with 10 entries");
+  const expectedEvict = Math.floor(10 * result.evictRatio);
+  assert.equal(result.afterSize, 10 - expectedEvict,
+    `after eviction, size should be ${10 - expectedEvict} (evicted ${expectedEvict}), got ${result.afterSize}`);
+  assert.deepEqual(result.survivingDepths,
+    Array.from({ length: 10 - expectedEvict }, (_, i) => i + 1 + expectedEvict),
+    `depth-preferred eviction should keep deepest ${10 - expectedEvict} entries,` +
+      `dropping shallowest ${expectedEvict}; survivors: ${result.survivingDepths.join(",")}`);
+});
+
+test("#40 ttStore depth-preferred: deeper existing entry is not overwritten by shallower store", () => {
+  // 配合 partial eviction 的另一条不变量:即使没满,浅 store 也不覆盖深 entry。
+  // 这是 depth-preferred replacement 的另一面,确保 PV 信息不被浅搜索污染。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const tt = createTranspositionTable();
+    // 先存 depth=5 的 PV
+    ttStore(tt, 0xabc123, 5, 100, TT_FLAG_EXACT, "pv-key");
+    // 再尝试存 depth=3 的浅搜索结果(应被拒绝)
+    ttStore(tt, 0xabc123, 3, -50, TT_FLAG_UPPER, "shallow-key");
+    const entry = tt.get(0xabc123);
+    return { depth: entry.depth, score: entry.score, flag: entry.flag, bestMoveKey: entry.bestMoveKey };
+  })()`);
+  assert.equal(result.depth, 5, "deeper entry must be retained");
+  assert.equal(result.score, 100, "PV score must survive shallow store attempt");
+  assert.equal(result.bestMoveKey, "pv-key", "PV bestMoveKey must survive shallow store attempt");
+});

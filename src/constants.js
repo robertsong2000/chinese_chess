@@ -210,7 +210,14 @@ const TIME_MAX_EXTRA_DEPTH = 2;       // 关键局面最多延伸的 ply 数
 const TT_FLAG_EXACT = 0; // PV 节点:score 是真实分值
 const TT_FLAG_LOWER = 1; // beta cutoff:score 是下界
 const TT_FLAG_UPPER = 2; // alpha 未升:score 是上界
-const TT_MAX_ENTRIES = 200000; // 容量上限,满则清空(避免内存爆炸)
+const TT_MAX_ENTRIES = 200000; // 容量上限,满则触发 eviction(避免内存爆炸)
+// Replacement scheme(depth-preferred + partial eviction):
+// 满 → 一次性删除 depth 最浅的 25%,保留深条目与 PV/EXACT 信息。
+// 比旧版 tt.clear() 优势:不全清,PV 信息留在 TT 中,下一深度/下一次搜索仍可命中
+// (直接服务"看 5-7 步":TT 命中率 >= 30% 让 iterative deepening 在同等时间内多搜 1-2 ply)。
+// 25% 的依据:每次 eviction 后腾出 50000 槽,下次 eviction 至少 50000 次新存入后才再触发,
+// 摊销代价 O(1);保留 75% 让 PV/killer 等 deep 信息不被破坏。
+const TT_EVICT_RATIO = 0.25;
 const TT_BONUS = 90000; // TT best move 在排序中的 bonus(高于 killer,低于 preferred)
 // 用 splitmix32 + 固定种子生成 Zobrist 数,保证同一部署可复现
 const ZOBRIST_PIECE_KEYS = (() => {
