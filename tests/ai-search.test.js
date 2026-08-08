@@ -310,3 +310,56 @@ test("check extension: AI prioritizes capturing the checker when in check", () =
     `black horse should capture the checking chariot at (4,5); got piece=${result.pieceId} to=(${result.toX},${result.toY})`,
   );
 });
+
+test("aspiration window constants are configured for tactical depth burst", () => {
+  // 契约:ASPIRATION_MIN_DEPTH = 3(经典做法:1-2 深度窗口太窄收益小);
+  // ASPIRATION_WINDOW = 150(象棋兵 100、马 430,150 介于"兵变化"与"半个马"之间,
+  // 既覆盖常见评估微调,又不会因窗口太宽失去 cutoff 价值)。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    minDepth: ASPIRATION_MIN_DEPTH,
+    window: ASPIRATION_WINDOW,
+  }))()`);
+  assert.equal(result.minDepth, 3, "ASPIRATION_MIN_DEPTH should be 3");
+  assert.equal(result.window, 150, "ASPIRATION_WINDOW should be 150");
+});
+
+test("root PVS + aspiration window: hard AI takes a free chariot in 1-ply tactic", () => {
+  // 战术局面:红车在 (4,5) 无任何保护(它仅是死子);黑方有马 (5,3) 走日可吃车 (4,5)。
+  // 注意:这次红车并未将军黑将(将仍在 (3,0)),所以局面是"无威胁的免费吃子"。
+  // 1) hard AI(depth 5)应直接选马吃车(净 +900)。
+  // 2) 验证 PVS + aspiration 路径在 root 不崩溃,返回的走法合法且为吃车。
+  // 该测试在 #29 check-extension 测试基础上调整:红将 (3,9) 错开,使 red 车不再将军 black 将。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 4, y: 5, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 5, y: 3, alive: true },
+    ];
+    state = createGame(SIDES.RED, "hard");
+    state.status = "playing";
+    state.currentSide = SIDES.BLACK;
+    state.board = board;
+    state.snapshots = [];
+    state.moveHistory = [];
+    const move = chooseAIMove();
+    const legal = allLegalMoves(board, SIDES.BLACK).some(
+      (m) => m.pieceId === move.pieceId && m.toX === move.toX && m.toY === move.toY,
+    );
+    return {
+      ateChariot: Boolean(move && move.pieceId === 'bh' && move.toX === 4 && move.toY === 5),
+      isLegal: legal,
+      pieceId: move && move.pieceId,
+      toX: move && move.toX,
+      toY: move && move.toY,
+    };
+  })()`);
+  assert.equal(result.isLegal, true, "returned move must be legal");
+  assert.equal(
+    result.ateChariot,
+    true,
+    `black horse should take the free chariot at (4,5); got piece=${result.pieceId} to=(${result.toX},${result.toY})`,
+  );
+});

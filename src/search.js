@@ -334,40 +334,52 @@ function runAISearch(s) {
   const scoreHistory = [];
   let stableRun = 0;
   let extended = 0;
+  let prevBestScore = null;
 
   for (let depth = 1; depth <= maxDepth; depth += 1) {
-    let bestAtDepth = best;
-    let bestScore = -Infinity;
-    const ordered = orderMoves(s.board, rootMoves, s.currentSide, s.currentSide, best);
-    for (const move of ordered) {
-      if (performance.now() > deadline) break;
-      const score = -negamax(
-        applyMoveToBoard(s.board, move),
-        opposite(s.currentSide),
-        depth - 1,
-        -Infinity,
-        Infinity,
-        s.currentSide,
-        tt,
-        deadline,
-        1,
-        killers,
-        history,
-      ) - rootCyclePenalty(s.board, move, s.currentSide, rootCycleOpts);
-      if (score > bestScore) {
-        bestScore = score;
-        bestAtDepth = move;
-      }
+    // Aspiration window:depth >= MIN 时,以前一深度 bestScore 为中心窄窗口搜索;
+    // fail-high/fail-low 时用全窗口 re-search。窗口窄 → cutoff 触发率更高 → root 更快收敛。
+    let alpha;
+    let beta;
+    if (depth >= ASPIRATION_MIN_DEPTH && prevBestScore !== null) {
+      alpha = prevBestScore - ASPIRATION_WINDOW;
+      beta = prevBestScore + ASPIRATION_WINDOW;
+    } else {
+      alpha = -Infinity;
+      beta = Infinity;
     }
+
+    let result = searchRootAtDepth(
+      s, rootMoves, depth, best, alpha, beta,
+      deadline, tt, killers, history, rootCycleOpts,
+    );
+
+    // Fail-high/fail-low:aspiration 落窗 → 用全窗口 re-search 拿到真实分数与最佳走法。
+    // 超时时不 re-search(避免二次超时);只要 result 不超时且落窗,就重做一次。
+    if (
+      !result.timedOut
+      && (result.bestScore <= alpha || result.bestScore >= beta)
+    ) {
+      const reSearch = searchRootAtDepth(
+        s, rootMoves, depth, result.bestMove, -Infinity, Infinity,
+        deadline, tt, killers, history, rootCycleOpts,
+      );
+      if (!reSearch.timedOut) result = reSearch;
+    }
+
     if (performance.now() > deadline) break;
-    best = bestAtDepth;
+    if (result.timedOut && depth > 1) break; // 超时且 depth>1 → 沿用上一深度的 best
+    if (!result.bestMove) break;
+
+    best = result.bestMove;
+    prevBestScore = result.bestScore;
 
     // === 时间管理:仅 hard 启用 ===
     if (s.aiDifficulty === "hard") {
       const prevScore = scoreHistory.length ? scoreHistory[scoreHistory.length - 1] : undefined;
-      scoreHistory.push(bestScore);
+      scoreHistory.push(result.bestScore);
       if (prevScore !== undefined) {
-        if (Math.abs(prevScore - bestScore) < TIME_STABLE_WINDOW) {
+        if (Math.abs(prevScore - result.bestScore) < TIME_STABLE_WINDOW) {
           stableRun += 1;
           // 连续 N 个深度评分稳定 + 已达合理深度 → 提前停(节省时间给后续回合)
           if (stableRun >= TIME_STABLE_RUN
@@ -379,7 +391,7 @@ function runAISearch(s) {
           stableRun = 0;
           // 关键局面:最后深度评分剧烈改进 + 时间还够 → 延伸 1 ply
           if (depth === maxDepth
-            && Math.abs(prevScore - bestScore) > TIME_EXTEND_IMPROVEMENT
+            && Math.abs(prevScore - result.bestScore) > TIME_EXTEND_IMPROVEMENT
             && extended < TIME_MAX_EXTRA_DEPTH
             && performance.now() - startTime < baseBudget * 0.6) {
             maxDepth += 1;
@@ -391,6 +403,61 @@ function runAISearch(s) {
     }
   }
   return best || moves[0];
+}
+
+// Root PVS + Aspiration:在指定窗口内搜索 root 的最佳走法。
+// 首走法(走法排序后,通常是上一深度的 best)用 full window,其余走法用 zero-window
+// (-alpha-1, -alpha) 试探;zero-window 落在 (alpha, beta) 之间则用 full window re-search。
+// 返回 {bestMove, bestScore, timedOut}。superRootAspiration 由调用方处理 fail-high/low。
+function searchRootAtDepth(s, rootMoves, depth, prevBest, alpha, beta,
+  deadline, tt, killers, history, rootCycleOpts) {
+  const ordered = orderMoves(s.board, rootMoves, s.currentSide, s.currentSide, prevBest);
+  if (!ordered.length) return { bestMove: null, bestScore: -Infinity, timedOut: true };
+
+  let bestMove = ordered[0];
+  let bestScore = -Infinity;
+  let alphaLocal = alpha;
+  let timedOut = false;
+
+  for (let i = 0; i < ordered.length; i += 1) {
+    const move = ordered[i];
+    if (performance.now() > deadline) {
+      timedOut = true;
+      break;
+    }
+    const childBoard = applyMoveToBoard(s.board, move);
+    const penalty = rootCyclePenalty(s.board, move, s.currentSide, rootCycleOpts);
+    let score;
+    if (i === 0) {
+      // 首走法:full window
+      score = -negamax(
+        childBoard, opposite(s.currentSide), depth - 1, -beta, -alphaLocal,
+        s.currentSide, tt, deadline, 1, killers, history,
+      ) - penalty;
+    } else {
+      // 其余走法:zero-window probe
+      score = -negamax(
+        childBoard, opposite(s.currentSide), depth - 1, -alphaLocal - 1, -alphaLocal,
+        s.currentSide, tt, deadline, 1, killers, history,
+      ) - penalty;
+      // zero-window 失败 → 落在 (alpha, beta) 之间 → full window re-search
+      if (score > alphaLocal && score < beta) {
+        score = -negamax(
+          childBoard, opposite(s.currentSide), depth - 1, -beta, -alphaLocal,
+          s.currentSide, tt, deadline, 1, killers, history,
+        ) - penalty;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = move;
+    }
+    alphaLocal = Math.max(alphaLocal, score);
+    // Root beta cutoff:对手(模拟 side)宁愿走其他线 → 该走法不必继续展开
+    if (alphaLocal >= beta) break;
+  }
+
+  return { bestMove, bestScore, timedOut };
 }
 
 function pickEasyMove(moves, board = state.board, side = state.currentSide) {

@@ -85,6 +85,16 @@ const SEE_ORDERING_LOSING_THRESHOLD = -200;
 // move ordering:深度亏子 capture 的 SEE 折扣系数
 const SEE_ORDERING_MULTIPLIER = 8;
 
+// === Aspiration Window + Root PVS ===
+// 经典 root 优化:depth >= ASPIRATION_MIN_DEPTH 时,以前一深度的 bestScore 为中心,
+// 用 ±ASPIRATION_WINDOW 的窄窗口搜索;fail-high/fail-low 时用全窗口 re-search。
+// 窗口窄 → 大量 cutoff 触发 → root 搜索快 20-50%。直接服务"看 5-7 步":
+// 同样的时间预算内,root 节点更快收敛,深层(depth>=5)能完成。
+const ASPIRATION_MIN_DEPTH = 3;
+// 窗口大小 ±N。象棋评分粒度:兵 100,马 430,车 900;战术变化常 ±300-500。
+// 80 太窄(一次兵的位置变化就出窗),300 太宽(几乎等于全窗口)。150 平衡。
+const ASPIRATION_WINDOW = 150;
+
 // === Time management ===
 // 基准思考时间(benchmark 用 timeScale 包装 performance.now,此处维持原值以确保 wall clock 可控)。
 // hard 通过 allocateTimeFactor 动态调整:残局/受困多想,开局/复杂少想,关键局面延伸深度。
