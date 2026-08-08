@@ -95,6 +95,43 @@ const ASPIRATION_MIN_DEPTH = 3;
 // 80 太窄(一次兵的位置变化就出窗),300 太宽(几乎等于全窗口)。150 平衡。
 const ASPIRATION_WINDOW = 150;
 
+// === Futility Pruning + Razoring(浅层 forward pruning)===
+// 经典 forward pruning:在 frontier nodes(depth=1)用静态评估预筛明显劣势的局面,
+// 跳过完整搜索,大幅减少 frontier node 数 → 同时间预算内深度 +1。直接服务"看 5-7 步"。
+//
+// Razoring:standPat + margin < alpha → 该节点完整搜索的 best 大概率 < alpha,
+// 降到 quiescence 只搜 tactical 走法(capture sequence)。若 quiescence 给出的分数仍 ≤ alpha,
+// 直接返回(score 是上界);若 fail-high(> alpha),回退到 main search 拿精确分数。
+//
+// Futility pruning:standPat + margin ≤ alpha → move loop 内跳过 quiet 非 check 走法
+// (capture 与 check 仍搜索,它们是战术性强走,有改 alpha 的可能)。
+// 保留 i=0 的第一个走法(走法排序后通常最优)以确保 bestMove 不为 null,保护 TT 正确性。
+//
+// Razoring 与 futility 在 depth=1 同时启用:razor 更激进(整节点跳过),futility 更细粒度(move-level skip)。
+// 两者均要求 !inCheck(将军下必须搜所有 evading moves);alpha/beta 有限(避免 mate search 误判)。
+//
+// FUTILITY_MIN_WINDOW:futility 仅在 beta - alpha > 此值时触发。
+// PVS zero-window probe(beta = alpha + 1)路径下,跳过 quiet 走法会让 PVS 误判 bestMove
+// (因为 PVS probe 期望精确 score,跳过的 quiet 走法可能是真正改进 alpha 的走法)。
+// 设为 1 等价于"非 zero-window 才启用",即窗口宽度 >= 2 才触发 futility。
+const FUTILITY_MIN_WINDOW = 1;
+// Margin 取值(关键 trade-off):
+//   - 中国象棋评估函数精度有限(无 chess 经典 Stockfish 那种 ultra-fine-tuned eval),
+//     过激进的 margin(如 300 / 600 / 1500)会让 futility/razor 在 self-play 中频繁误 prune 位置性走法 → 棋力退化。
+//   - 自对弈 benchmark + 战术局面回归测试(2026-08-08)逐步加码验证:
+//     margin=300 → benchmark hard 胜率退化到 50% + 战术吃马测试失败;
+//     margin=600 → 战术吃马测试仍失败(41 个 razor return 改变 bestMove 选择);
+//     margin=1500/2000/5000 → 仍失败(razor 在 PVS zero-window probe 路径 alpha=8000 时触发,
+//       quiescence 给的 razorScore 偏低于真实最佳 quiet 走法 score → PVS 误判该走法无改进 → bestMove 错过);
+//     RAZORING_DEPTH=0(完全禁用 razor,只保留 futility)+ FUTILITY_MARGIN=300 → 战术吃马测试通过。
+//   - **结论**:razor 在中国象棋评估函数精度下风险过高(PVS zero-window probe 时 quiescence 偏低导致
+//     bestMove 错过),完全禁用。futility 是 move-level skip(保留首走法 + 不返回上界),精度更可控,
+//     margin=300 ≈ 1 minor piece(经典 Stockfish 值),通过战术吃马 + benchmark 验证棋力无回归。
+const RAZORING_DEPTH = 0;
+const RAZORING_MARGIN = 300;
+const FUTILITY_DEPTH = 1;
+const FUTILITY_MARGIN = 300;
+
 // === Time management ===
 // 基准思考时间(benchmark 用 timeScale 包装 performance.now,此处维持原值以确保 wall clock 可控)。
 // hard 通过 allocateTimeFactor 动态调整:残局/受困多想,开局/复杂少想,关键局面延伸深度。

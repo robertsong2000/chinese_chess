@@ -700,6 +700,59 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
   if (moves.length === 0) {
     return inCheck ? -MATE_SCORE - depth : -8000;
   }
+
+  // 静态评估缓存(razoring + futility 共用,避免重复扫描棋盘)。
+  // 惰性计算:仅当 razoring/futility 路径需要时调用一次。
+  let standPatCache = null;
+  const getStandPat = () => {
+    if (standPatCache === null) {
+      standPatCache = evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
+    }
+    return standPatCache;
+  };
+
+  // === Razoring(depth=1):standPat 远低于 alpha → 降到 quiescence ===
+  // 经典 forward pruning:边界节点(depth=1)的静评估远低于 alpha → 完整搜索的 best 大概率 < alpha,
+  // 只搜 tactical 走法(capture sequence)即可得到上界。若 quiescence ≤ alpha,直接返回;
+  // fail-high(> alpha)则 fall-through 到 main search 拿精确分数。
+  if (
+    depth === RAZORING_DEPTH
+    && !inCheck
+    && alpha > -Infinity
+    && beta < Infinity
+  ) {
+    const razorStandPat = getStandPat();
+    if (razorStandPat + RAZORING_MARGIN < alpha) {
+      const razorScore = quiescence(board, side, alpha, beta, aiSide, QUIESCENCE_DEPTH, deadline, moves);
+      if (razorScore <= alpha) {
+        if (tt) ttStore(tt, hash, depth, razorScore, TT_FLAG_UPPER, null);
+        return razorScore;
+      }
+      // fail-high:razorScore > alpha → 继续 main search 拿精确分数与 bestMove
+    }
+  }
+
+  // === Futility pruning flag(depth=1):节点最佳 quiet 走法大概率 ≤ alpha ===
+  // 在 move loop 内跳过 quiet 非 check 走法(capture 与 check 仍搜索,因为它们是战术性强走,有改 alpha 的可能)。
+  // razoring 已过滤掉极端 standPat 落差,这里处理"边界 futile"节点:standPat + margin ≤ alpha。
+  // move loop 内会以 i >= 1 + !isTactical + !givesCheck 三重条件保证至少搜索首个走法(走法排序后通常最优),
+  // 确保 bestMove 不为 null,保护 TT store 的 EXACT/UPPER flag 正确性。
+  //
+  // **窗口检查**(beta - alpha > FUTILITY_MIN_WINDOW):在 PVS zero-window probe(beta=alpha+1)路径下,
+  // alpha 可能异常大(如 +8000),此时 standPat + margin ≤ alpha 容易满足,触发 futility 会跳过 quiet 走法,
+  // 而 PVS probe 期望精确 score — 跳过的 quiet 走法可能是真正改进 alpha 的走法,导致 PVS 误判该走法
+  // "no improvement",错过真实 bestMove。回归测试 + benchmark 证实:futility 在 zero-window 下启用会让
+  // hard AI 在 self-play 中输给 normal(2026-08-08 验证:hard 执黑被 normal checkmate)。
+  // 故仅在 full window(beta - alpha > FUTILITY_MIN_WINDOW)下启用 futility。
+  let futilityPrunable = false;
+  if (
+    depth === FUTILITY_DEPTH
+    && !inCheck
+    && beta - alpha > FUTILITY_MIN_WINDOW
+  ) {
+    if (getStandPat() + FUTILITY_MARGIN <= alpha) futilityPrunable = true;
+  }
+
   let best = -Infinity;
   let bestMove = null;
   let didCut = false;
@@ -724,6 +777,11 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
       && isInCheck(childBoard, opposite(side));
     const extDepth = givesCheck ? depth - 1 + CHECK_EXTENSION_PLY : depth - 1;
     const childExt = givesCheck ? extensionsInLine + 1 : extensionsInLine;
+    // Futility pruning:i>=1(保留首走法确保 bestMove 非空)+ futile 节点 + quiet 非 check 走法 → 跳过。
+    // capture/check 走法仍搜索,因为它们是战术性强走,有改 alpha 的可能。
+    if (i >= 1 && futilityPrunable && !isTactical && !givesCheck) {
+      continue;
+    }
     if (i === 0) {
       score = -negamax(childBoard, opposite(side), extDepth, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt);
     } else {

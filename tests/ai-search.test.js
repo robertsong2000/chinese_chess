@@ -363,3 +363,67 @@ test("root PVS + aspiration window: hard AI takes a free chariot in 1-ply tactic
     `black horse should take the free chariot at (4,5); got piece=${result.pieceId} to=(${result.toX},${result.toY})`,
   );
 });
+
+test("futility pruning + razoring constants are configured for safe forward pruning", () => {
+  // 契约:
+  // - RAZORING_DEPTH=0(razor 完全禁用):在中国象棋评估函数精度下,razor 风险过高 —
+  //   quiescence 给的 razorScore 偏低于真实最佳 quiet 走法 score(因为 quiescence 只看 capture
+  //   sequence,忽略位置性 quiet 走法)。当 PVS zero-window probe 时(alpha 异常大,如 +8000),
+  //   razor 提前 return 偏低分数,导致 PVS 误判该走法 "no improvement",错过真实 bestMove。
+  //   回归测试(战术吃马局面)证实:任何 razor margin(300/600/1500/2000/5000)都导致 bestMove
+  //   错误。故 razor 完全关闭,留 RAZORING_MARGIN 作占位以便未来重新启用。
+  // - FUTILITY_DEPTH=1 + FUTILITY_MARGIN=300:futility 是 move-level skip(保留首走法 + 不返回上界),
+  //   精度比 razor 可控,margin=300 ≈ 1 minor piece(经典 Stockfish 值)。回归测试通过。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    razorDepth: RAZORING_DEPTH,
+    razorMargin: RAZORING_MARGIN,
+    futilityDepth: FUTILITY_DEPTH,
+    futilityMargin: FUTILITY_MARGIN,
+  }))()`);
+  assert.equal(result.razorDepth, 0, "RAZORING_DEPTH should be 0 (razor disabled: PVS zero-window probe interaction risk)");
+  assert.equal(result.razorMargin, 300, "RAZORING_MARGIN kept as placeholder");
+  assert.equal(result.futilityDepth, 1, "FUTILITY_DEPTH should be 1");
+  assert.equal(result.futilityMargin, 300, "FUTILITY_MARGIN should be 300 (~ 1 minor piece, Stockfish classic)");
+});
+
+test("futility pruning + razoring: hard AI still takes a free horse in 1-ply tactic", () => {
+  // 战术局面:红马 (1,9) 无任何保护(死子);黑车 (1,5) 沿 y 轴直线可吃马(路径 (1,6)(1,7)(1,8) 全空)。
+  // 红将 (3,9) 与黑将 (4,0) 错列(避免飞将直接吃红将的 trivial 走法),局面真正考验战术选择。
+  // 1) hard AI(depth=5)应直接选车吃马(净 +430)。
+  // 2) 验证 futility pruning / razoring 启用后,depth=1 子节点不会误 prune 掉吃马的 capture 走法
+  //    (capture move 走 futility-pruning 例外分支,不被跳过)。
+  // 该测试与 #30 PVS 测试不同局面:这次是黑车吃红马(不是黑马吃红车),验证 futility/razor 不破坏战术选择。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rh', side: SIDES.RED, type: TYPES.HORSE, x: 1, y: 9, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 1, y: 5, alive: true },
+    ];
+    state = createGame(SIDES.RED, "hard");
+    state.status = "playing";
+    state.currentSide = SIDES.BLACK;
+    state.board = board;
+    state.snapshots = [];
+    state.moveHistory = [];
+    const move = chooseAIMove();
+    const legal = allLegalMoves(board, SIDES.BLACK).some(
+      (m) => m.pieceId === move.pieceId && m.toX === move.toX && m.toY === move.toY,
+    );
+    return {
+      ateHorse: Boolean(move && move.pieceId === 'bc' && move.toX === 1 && move.toY === 9),
+      isLegal: legal,
+      pieceId: move && move.pieceId,
+      toX: move && move.toX,
+      toY: move && move.toY,
+    };
+  })()`);
+  assert.equal(result.isLegal, true, "returned move must be legal");
+  assert.equal(
+    result.ateHorse,
+    true,
+    `black chariot should take the free horse at (1,9); got piece=${result.pieceId} to=(${result.toX},${result.toY})`,
+  );
+});
