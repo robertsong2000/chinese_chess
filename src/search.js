@@ -966,8 +966,11 @@ function evaluateBoard(board, aiSide) {
 // 实用残局模式识别:返回 side 方获得的必胜残局加分。
 // 覆盖 5 种经典必胜/优势局面:车炮对单车 / 车马对单车 / 马兵对单士 /
 // 车对仅剩士象 / 过河兵对孤将。直接服务"残局能赢必胜局面"目标。
+// **#36 阶段守卫**:仅 isEndgame(board) 时启用。原版无守卫在中局可能触发
+// (如某方早早丢马炮剩单车),导致评估严重扭曲、self-play 退化。
 function endgamePatternBonus(board, side) {
   if (!ENDGAME_PATTERN_BONUS) return 0;
+  if (!isEndgame(board)) return 0;
   const enemy = opposite(side);
   const mine = livePieces(board).filter((p) => p.side === side && p.type !== TYPES.GENERAL);
   const theirs = livePieces(board).filter((p) => p.side === enemy && p.type !== TYPES.GENERAL);

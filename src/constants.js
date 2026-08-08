@@ -240,12 +240,17 @@ const ENDGAME_CHECK_BONUS = 80;
 // 强方即使放弃 1 个 minor piece 换入此结构仍评分正向,这正是"鼓励换子"的语义。
 // 辅助档(车对仅剩士象 / 过河兵对孤将)给 200-300:这些是优势但非理论必胜,
 // 鼓励保持优势而非直接判胜。
+// 残局模式加分:5 种经典必胜/优势结构。
+// **2026-08-08 Phase 5 #36 调整**:原值 500/500/500/300/200 在 self-play 中
+// 引入退化(hard 0/4 vs normal)— 过度追求"必胜结构"反而失战术。
+// 消融实验证实:置 0 后 hardWinRate 0% → 50%。修复:(1) 加 isEndgame 守卫防止
+// 中局触发;(2) 降幅度到原值 ~40%(保留鼓励效应,不掩盖战术评估)。
 const ENDGAME_PATTERN_BONUS = {
-  chariotCannonVsChariot: 500,     // 车炮对单车:经典必胜(炮借助将/士作架破车)
-  chariotHorseVsChariot: 500,      // 车马对单车:经典必胜(马步配合车攻将)
-  horseSoldierVsAdvisor: 500,      // 马兵对单士:经典必胜(兵借马势破士)
-  chariotVsGuardsOnly: 300,        // 车对仅剩士象(无对方攻子):车必破士象
-  advancedSoldierVsLoneKing: 200,  // 过河兵对孤将(对方无攻子无士象):鼓励兵升变
+  chariotCannonVsChariot: 200,     // 车炮对单车:经典必胜(炮借助将/士作架破车)
+  chariotHorseVsChariot: 200,      // 车马对单车:经典必胜(马步配合车攻将)
+  horseSoldierVsAdvisor: 200,      // 马兵对单士:经典必胜(兵借马势破士)
+  chariotVsGuardsOnly: 120,        // 车对仅剩士象(无对方攻子):车必破士象
+  advancedSoldierVsLoneKing: 80,   // 过河兵对孤将(对方无攻子无士象):鼓励兵升变
 };
 
 // 战术模式加分(fork / pin / discovered attack 检测)

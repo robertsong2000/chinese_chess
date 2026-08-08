@@ -567,8 +567,9 @@ test("tactic detection: horse fork scores higher than symmetric baseline", () =>
 
 test("endgame pattern bonus constants cover 5 winning patterns at >= 200", () => {
   // 契约:ENDGAME_PATTERN_BONUS 覆盖 5 种必胜/优势残局。
-  // 核心必胜(车炮对单车 / 车马对单车 / 马兵对单士)给 500,鼓励换子进入;
-  // 辅助优势(车对仅剩士象 / 过河兵对孤将)给 200-300,鼓励保持优势。
+  // **#36 调整**:原值 500/500/500/300/200 在 self-play 中引入退化(hard 0/4 vs normal),
+  // 消融实验证实置 0 后 hardWinRate 0% → 50%。修复:降至原值 ~40% + 加 isEndgame 守卫。
+  // 新契约:核心必胜 >= 150,辅助优势 >= 60。
   const engine = createEngine();
   const result = engine.json(`(() => ({
     chariotCannonVsChariot: ENDGAME_PATTERN_BONUS.chariotCannonVsChariot,
@@ -577,19 +578,23 @@ test("endgame pattern bonus constants cover 5 winning patterns at >= 200", () =>
     chariotVsGuardsOnly: ENDGAME_PATTERN_BONUS.chariotVsGuardsOnly,
     advancedSoldierVsLoneKing: ENDGAME_PATTERN_BONUS.advancedSoldierVsLoneKing,
   }))()`);
-  assert.equal(result.chariotCannonVsChariot, 500, "chariotCannonVsChariot should be 500");
-  assert.equal(result.chariotHorseVsChariot, 500, "chariotHorseVsChariot should be 500");
-  assert.equal(result.horseSoldierVsAdvisor, 500, "horseSoldierVsAdvisor should be 500");
-  assert.ok(result.chariotVsGuardsOnly >= 200, "chariotVsGuardsOnly should be >= 200");
-  assert.ok(result.advancedSoldierVsLoneKing >= 100, "advancedSoldierVsLoneKing should be >= 100");
+  assert.ok(result.chariotCannonVsChariot >= 150, "chariotCannonVsChariot should be >= 150");
+  assert.ok(result.chariotHorseVsChariot >= 150, "chariotHorseVsChariot should be >= 150");
+  assert.ok(result.horseSoldierVsAdvisor >= 150, "horseSoldierVsAdvisor should be >= 150");
+  assert.ok(result.chariotVsGuardsOnly >= 60, "chariotVsGuardsOnly should be >= 60");
+  assert.ok(result.advancedSoldierVsLoneKing >= 40, "advancedSoldierVsLoneKing should be >= 40");
+  // #36 上限守卫:任何加分 <= 300,防止再次过度放大
+  assert.ok(result.chariotCannonVsChariot <= 300, "chariotCannonVsChariot should be <= 300 (#36 cap)");
+  assert.ok(result.chariotHorseVsChariot <= 300, "chariotHorseVsChariot should be <= 300 (#36 cap)");
+  assert.ok(result.horseSoldierVsAdvisor <= 300, "horseSoldierVsAdvisor should be <= 300 (#36 cap)");
 });
 
 test("endgame pattern: chariot+cannon vs lone chariot is recognized as winning", () => {
   // 残局局面:红方 车+炮+将,黑方 车+将(经典必胜 — 车炮胜单车)。
   // 期望:
-  //   1) endgamePatternBonus(board, RED) >= 500(必胜加分)
+  //   1) endgamePatternBonus(board, RED) >= 150(#36 调整后幅度)
   //   2) endgamePatternBonus(board, BLACK) == 0(黑方无必胜结构)
-  //   3) evaluateBoard(board, RED) > 500(红方子力 900+460+对称 + 必胜加分)
+  //   3) evaluateBoard(board, RED) > 500(红方子力 900+460 + 必胜加分)
   // 红将 (4,9) 与黑将 (4,0) 同列无阻挡会触发飞将,故意让红将在 (3,9) 错列。
   const engine = createEngine();
   const result = engine.json(`(() => {
@@ -607,14 +612,14 @@ test("endgame pattern: chariot+cannon vs lone chariot is recognized as winning",
       redPattern,
       blackPattern,
       evalRed,
-      winningRecognized: redPattern >= 500,
+      winningRecognized: redPattern >= 150,
       symmetricZero: blackPattern === 0,
     };
   })()`);
   assert.equal(
     result.winningRecognized,
     true,
-    `endgamePatternBonus(red) should be >= 500 (chariot+cannon vs lone chariot); got ${result.redPattern}`,
+    `endgamePatternBonus(red) should be >= 150 (chariot+cannon vs lone chariot); got ${result.redPattern}`,
   );
   assert.equal(
     result.symmetricZero,
@@ -624,6 +629,38 @@ test("endgame pattern: chariot+cannon vs lone chariot is recognized as winning",
   assert.ok(
     result.evalRed > 500,
     `evaluateBoard(board, RED) should be > 500 (winning pattern + material advantage); got ${result.evalRed}`,
+  );
+});
+
+test("#36 endgame pattern bonus returns 0 in non-endgame (midgame guard)", () => {
+  // #36 回归测试:中局阶段(双方非将子力 > ENDGAME_THRESHOLD)不应触发残局加分。
+  // 原版无 isEndgame 守卫,在双方子力较多时若一方早早丢马炮剩单车,
+  // endgamePatternBonus 仍会触发 +500,严重扭曲评估、self-play 退化。
+  //
+  // 中局局面:红方 车+炮+双马+双兵+将,黑方 车+将(双方非将子力和 > 1800)。
+  // 期望:endgamePatternBonus(board, RED) === 0(中局不触发)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 4, y: 5, alive: true },
+      { id: 'rp', side: SIDES.RED, type: TYPES.CANNON, x: 5, y: 7, alive: true },
+      { id: 'rh1', side: SIDES.RED, type: TYPES.HORSE, x: 2, y: 7, alive: true },
+      { id: 'rh2', side: SIDES.RED, type: TYPES.HORSE, x: 6, y: 7, alive: true },
+      { id: 'rs1', side: SIDES.RED, type: TYPES.SOLDIER, x: 0, y: 6, alive: true },
+      { id: 'rs2', side: SIDES.RED, type: TYPES.SOLDIER, x: 8, y: 6, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 4, y: 3, alive: true },
+    ];
+    const isEg = isEndgame(board);
+    const redPattern = endgamePatternBonus(board, SIDES.RED);
+    return { isEg, redPattern, guarded: redPattern === 0 };
+  })()`);
+  assert.equal(result.isEg, false, "scenario should be midgame (not endgame)");
+  assert.equal(
+    result.guarded,
+    true,
+    `endgamePatternBonus should return 0 in midgame (isEndgame guard); got ${result.redPattern}`,
   );
 });
 

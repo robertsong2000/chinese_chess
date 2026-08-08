@@ -1,11 +1,11 @@
 {
-  "ranAt": "2026-08-08T10:26:46.879Z",
+  "ranAt": "2026-08-08T10:53:16.771Z",
   "config": {
-    "GAMES": 8,
+    "GAMES": 4,
     "MAX_PLY": 80,
     "NO_CAPTURE_DRAW_PLY": 30,
-    "HARD_DEADLINE_MS": 300,
-    "NORMAL_DEADLINE_MS": 200,
+    "HARD_DEADLINE_MS": 150,
+    "NORMAL_DEADLINE_MS": 100,
     "TACTIC_DEADLINE_MS": 300,
     "TACTIC_PASS_THRESHOLD": 0.6
   },
@@ -99,21 +99,21 @@
     ]
   },
   "summary": {
-    "games": 8,
-    "hardWins": 0,
-    "normalWins": 4,
-    "draws": 4,
-    "avgPly": 78,
-    "totalElapsedMs": 373253,
+    "games": 4,
+    "hardWins": 2,
+    "normalWins": 2,
+    "draws": 0,
+    "avgPly": 80,
+    "totalElapsedMs": 186513,
     "perGame": [
       {
         "id": 1,
         "red": "hard",
         "black": "normal",
-        "winner": null,
-        "reason": "stalemate",
-        "plies": 75,
-        "elapsedMs": 38440
+        "winner": "red",
+        "reason": "checkmate",
+        "plies": 79,
+        "elapsedMs": 40865
       },
       {
         "id": 2,
@@ -122,16 +122,16 @@
         "winner": "red",
         "reason": "material_majority",
         "plies": 80,
-        "elapsedMs": 54886
+        "elapsedMs": 52417
       },
       {
         "id": 3,
         "red": "hard",
         "black": "normal",
-        "winner": null,
-        "reason": "stalemate",
-        "plies": 75,
-        "elapsedMs": 38440
+        "winner": "red",
+        "reason": "checkmate",
+        "plies": 79,
+        "elapsedMs": 40752
       },
       {
         "id": 4,
@@ -140,45 +140,9 @@
         "winner": "red",
         "reason": "material_majority",
         "plies": 80,
-        "elapsedMs": 54863
-      },
-      {
-        "id": 5,
-        "red": "hard",
-        "black": "normal",
-        "winner": null,
-        "reason": "stalemate",
-        "plies": 75,
-        "elapsedMs": 38413
-      },
-      {
-        "id": 6,
-        "red": "normal",
-        "black": "hard",
-        "winner": "red",
-        "reason": "material_majority",
-        "plies": 80,
-        "elapsedMs": 54881
-      },
-      {
-        "id": 7,
-        "red": "hard",
-        "black": "normal",
-        "winner": null,
-        "reason": "stalemate",
-        "plies": 75,
-        "elapsedMs": 38470
-      },
-      {
-        "id": 8,
-        "red": "normal",
-        "black": "hard",
-        "winner": "red",
-        "reason": "material_majority",
-        "plies": 80,
-        "elapsedMs": 54860
+        "elapsedMs": 52479
       }
     ],
-    "hardWinRate": 0
+    "hardWinRate": 0.5
   }
 }
