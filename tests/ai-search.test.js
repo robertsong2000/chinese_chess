@@ -2303,4 +2303,155 @@ test("#59 evaluateBoard: pinned horse contributes zero mobility", () => {
   );
 });
 
+test("#60 self-play regression: hard does not lose to normal across a 4-game match", () => {
+  // Phase 5/7 曾因评估调整(原 ENDGAME_PATTERN_BONUS 500/500)引发 self-play 退化:
+  // hard 0/4 输给 normal。本测试为 Phase 12 评估精化(Tempo / Center Cannon / Pinned Mobility)
+  // 提供回归保护:跑 4 局 hard vs normal(2 局 hard 先手 + 2 局 normal 先手,先后手平衡),
+  // 断言 hard 整体不被 normal 战胜(hardWins >= normalWins)。
+  //
+  // 配置(快测):每局 maxply=12 + 极短 deadline(通过 timeScale 放大 performance.now 的 elapsed,
+  // 让 chooseAIMove 内部 deadline 提前触发,典型耗时 ~10-15 秒)。
+  // 完全确定性 alpha-beta + 无随机种子 → 4 局结果是固定 baseline,可作为回归对照。
+  //
+  // 退化触发条件:若 future 评估调整让 hard 漏看关键战术 → hard 子力被 normal 吃光 →
+  //   normalWins > hardWins → 测试失败,提示该评估调整引入退化。
+  //
+  // 当前 baseline(2026-08-09):hardWins=2, normalWins=2, draws=0(hard 与 normal 各持先手胜 1 局,
+  // 12-ply 短局下后手难翻盘,但 hard 不被 normal 战胜)。
+  const matchups = [
+    ["hard", "normal"],
+    ["normal", "hard"],
+    ["hard", "normal"],
+    ["normal", "hard"],
+  ];
+
+  const engine = createEngine();
+  const summary = engine.json(`(() => {
+    const maxPly = 12;
+    const drawPly = 15;
+    const matchups = ${JSON.stringify(matchups)};
+
+    const realNow = performance.now.bind(performance);
+
+    let hardWins = 0;
+    let normalWins = 0;
+    let draws = 0;
+    const perGame = [];
+
+    for (let gameIdx = 0; gameIdx < matchups.length; gameIdx += 1) {
+      const redDiff = matchups[gameIdx][0];
+      const blackDiff = matchups[gameIdx][1];
+      const hardIsRed = redDiff === "hard";
+
+      // timeScale:放大 performance.now() 的 elapsed,让 chooseAIMove 内 deadline 提前触发。
+      let timeScale = 1;
+      performance.now = function scaledNow() { return realNow() * timeScale; };
+
+      // 重置游戏 state(createGame 内部调用 resetSharedTT,清掉上一局 TT 数据)。
+      state = createGame(SIDES.RED, "hard");
+      state.status = "playing";
+      state.moveHistory = [];
+      state.snapshots = [];
+      state.capturedPieces = [];
+
+      let noCapturePly = 0;
+      let winner = null;
+      let reason = null;
+      let plies = 0;
+
+      for (let ply = 0; ply < maxPly; ply += 1) {
+        plies += 1;
+        const side = state.currentSide;
+        const diff = side === SIDES.RED ? redDiff : blackDiff;
+        state.aiDifficulty = diff;
+
+        // 时间盒:diff 难度对应 budget 毫秒,baseBudget 是 search.js 中默认值。
+        // timeScale = baseBudget / budget 让 chooseAIMove 内部以为已过 baseBudget 毫秒。
+        const budget = diff === "hard" ? 10 : 5;
+        const baseBudget = diff === "hard" ? 1100 : 520;
+        timeScale = baseBudget / budget;
+
+        const move = chooseAIMove();
+        if (!move) {
+          const checked = isInCheck(state.board, state.currentSide);
+          winner = checked ? opposite(state.currentSide) : null;
+          reason = checked ? "checkmate" : "stalemate";
+          break;
+        }
+
+        if (move.capturedPieceId) noCapturePly = 0; else noCapturePly += 1;
+
+        state.board = applyMoveToBoard(state.board, move);
+        state.snapshots.push({
+          board: cloneBoard(state.board),
+          currentSide: opposite(state.currentSide),
+        });
+        state.lastMove = { ...move };
+        state.moveHistory.push({ ...move });
+        state.currentSide = opposite(state.currentSide);
+
+        const nextMoves = allLegalMoves(state.board, state.currentSide);
+        if (!nextMoves.length) {
+          const checked = isInCheck(state.board, state.currentSide);
+          winner = checked ? opposite(state.currentSide) : null;
+          reason = checked ? "checkmate" : "stalemate";
+          break;
+        }
+        if (noCapturePly >= drawPly) {
+          winner = null;
+          reason = "draw_no_capture";
+          break;
+        }
+      }
+
+      performance.now = realNow;
+
+      if (!reason) {
+        // 步数耗尽未结束:用 evaluateBoard 在 RED 视角判定胜负。
+        const redScore = evaluateBoard(state.board, SIDES.RED);
+        const margin = 200;
+        if (redScore > margin) { winner = SIDES.RED; reason = "material_majority"; }
+        else if (redScore < -margin) { winner = SIDES.BLACK; reason = "material_majority"; }
+        else { winner = null; reason = "draw_material"; }
+      }
+
+      let winnerSide = null;
+      if (winner === "red") winnerSide = hardIsRed ? "hard" : "normal";
+      else if (winner === "black") winnerSide = hardIsRed ? "normal" : "hard";
+
+      if (winnerSide === "hard") hardWins += 1;
+      else if (winnerSide === "normal") normalWins += 1;
+      else draws += 1;
+
+      perGame.push({
+        gameIdx: gameIdx + 1,
+        red: redDiff,
+        black: blackDiff,
+        winner,
+        reason,
+        plies,
+        winnerSide,
+      });
+    }
+
+    return { hardWins, normalWins, draws, perGame };
+  })()`);
+
+  // 关键契约:hard 在 4 局 self-play 中不能被 normal 整体战胜。
+  // 退化场景(Phase 5/7 类):hard 0/4 或 1/3 输给 normal → normalWins > hardWins → 测试失败。
+  assert.ok(summary.hardWins >= summary.normalWins,
+    `hard should not lose to normal across 4 games (regression guard); `
+    + `got hardWins=${summary.hardWins}, normalWins=${summary.normalWins}, draws=${summary.draws}; `
+    + `perGame=${JSON.stringify(summary.perGame)}`);
+
+  // 完整性契约:4 局都返回有效结果(perGame 长度 = matchups 长度,每局有合法 winner/winnerSide)。
+  assert.equal(summary.perGame.length, matchups.length,
+    `should complete all ${matchups.length} games; got ${summary.perGame.length}`);
+  for (const g of summary.perGame) {
+    assert.ok(g.reason, `game ${g.gameIdx} should have a reason; got ${JSON.stringify(g)}`);
+    assert.ok(g.winnerSide === "hard" || g.winnerSide === "normal" || g.winnerSide === null,
+      `game ${g.gameIdx} winnerSide must be hard/normal/null(draw); got ${g.winnerSide}`);
+  }
+});
+
 

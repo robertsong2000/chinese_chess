@@ -1136,27 +1136,31 @@
       "phase": 12,
       "title": "Pinned Piece Mobility Penalty(被钉子的活动性归零)",
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 25,
-      "attempts": 0,
+      "attempts": 1,
       "description": "当前 tacticBonus 已识别 pin 给进攻方加分,但被钉子仍按正常计算 mobility。经典 AI 中,被绝对钉死的子其 mobility 应归零(因为任何移动都会暴露将)。实现:(1) search.js 加 findPinnedPieces(board, side) 返回被钉死子的集合;(2) evaluateBoard 内 mobility 计算跳过被钉子;(3) 测试:车-pin-马 结构,马 mobility=0(原值 >0)。",
       "files": [
         "src/search.js",
         "tests/ai-search.test.js"
-      ]
+      ],
+      "completed_at": "2026-08-09T06:15:44+08:00",
+      "commit_sha": "8d66d275c79455327eddb383fe9f60fa3f4bf438"
     },
     {
       "id": 60,
       "phase": 12,
       "title": "Self-play 退化回归测试(防止评估精化引入退化)",
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 25,
-      "attempts": 0,
+      "attempts": 1,
       "description": "Phase 5/7 曾因评估调整引发 self-play 退化(hard 输 normal)。建立 baseline self-play 测试:固定 seed 跑 4 局 hard vs normal,断言 hardWinRate >= 50%。本次新增 Phase 12 各项落地后此测试自动覆盖。",
       "files": [
         "tests/ai-search.test.js"
-      ]
+      ],
+      "completed_at": "2026-08-09T06:51:35.862220+08:00",
+      "commit_sha": "PENDING"
     }
   ],
   "history": [
@@ -1612,6 +1616,20 @@
       "action": "completed",
       "summary": "#58 Center Cannon Opening Bonus:constants.js 加 OPENING_MATERIAL_THRESHOLD=3000(isEndgame 镜像)+ CENTER_CANNON_OPENING_BONUS=20;search.js 加 isOpening(board) + centerCannonOpeningBonus(board, side)(炮在 x=4 + 红方 y=7/黑方 y=2 即\"炮二平五\"开局结构);evaluateBoard 在 !endgame 时双向相减;4 个测试覆盖:开局中炮加分 / 过河炮不加 / 残局守卫 / evaluateBoard 集成对称性。73/73 tests pass。Phase 12 进度 2/4。",
       "commit_sha": "085d6ab596a55b63e38cef4f8ae735244c5bfcb9"
+    },
+    {
+      "timestamp": "2026-08-09T06:15:44+08:00",
+      "todo_id": 59,
+      "action": "completed",
+      "summary": "#59 Pinned Piece Mobility:constants.js PINNED_MOBILITY_PENALTY{enabled,multiplier=1.0};search.js findPinnedPieces(board,side) 从将沿四方向扫描检测车型/炮型绝对 pin(返回 Set<pieceId>);evaluateBoard mobility 计算跳过被钉子(rawMoves + mobilityRefinementBonus 归零);4 新测试(constants/chariot pin/cannon pin/mobility 集成);77/77 pass",
+      "commit_sha": "8d66d275c79455327eddb383fe9f60fa3f4bf438"
+    },
+    {
+      "timestamp": "2026-08-09T06:51:35.862220+08:00",
+      "todo_id": 60,
+      "action": "completed",
+      "summary": "#60 Self-play 退化回归测试:tests/ai-search.test.js 加 4-局 hard-vs-normal self-play 测试(2 局 hard 先手 + 2 局 normal 先手,maxply=12,极短 deadline 通过 timeScale 放大 performance.now)。断言 hardWins >= normalWins(hard 不被 normal 整体战胜,Phase 5/7 类退化检测)。78/78 tests pass,npm test 总时长 ~16s(#60 自身 ~11s)。",
+      "commit_sha": "PENDING"
     }
   ],
   "rules": [
@@ -1623,5 +1641,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 12 next: #59 Pinned Piece Mobility Penalty(被钉子的活动性归零),保守取值,防止 self-play 退化。"
+  "next_run_hint": "Phase 12 全部完成(4/4)。下次:进入 Phase 13 或围绕\"二级-一级棋士\"目标生成新 TODO(例:TT depth-preferred replacement 升级、LMR late-move reduction、SMP 搜索、更多残局 tablebase)"
 }
