@@ -527,6 +527,17 @@ const HORSE_LEG_PENALTY = {
 // (向后兼容,保护初始对称测试)。
 const TEMPO_BONUS = 15;
 
+// #58 Center Cannon Opening Bonus(开局中炮加分):"炮二平五" / "炮八平五" 是中国
+// 象棋最经典的开局结构之一,炮在中路原位行(红 y=7 / 黑 y=2)威胁中卒、打通卒林线、
+// 支持双马屏风。当前 evaluateBoard 不识别此结构。
+// isOpening(board) 判定:双方非将子力均 >= OPENING_MATERIAL_THRESHOLD 时视为开局
+// (残局阈值 ENDGAME_MATERIAL_THRESHOLD=1800 的镜像;初始局面每方子力 ~4500,
+// 一方丢马(430)或炮(450)后仍 >= 3000,丢 2 个大子后才退出开局,符合直觉)。
+// 取值保守(20):远低于兵 100,避免与子力评估冲突,但足以让搜索在开局阶段
+// 优先选择中炮结构。仅在 !isEndgame 时启用(中局阶段同样有效,只是本项设计动机是开局)。
+const OPENING_MATERIAL_THRESHOLD = 3000;
+const CENTER_CANNON_OPENING_BONUS = 20;
+
 const POSITION_BONUS = {
   general: [
     [0, 0, 0, 8, 12, 8, 0, 0, 0],

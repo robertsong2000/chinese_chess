@@ -1239,6 +1239,13 @@ function evaluateBoard(board, aiSide, side = null) {
   if (side !== null) {
     score += (side === aiSide ? 1 : -1) * TEMPO_BONUS;
   }
+  // #58 Center Cannon Opening Bonus:开局阶段中炮(炮在 x=4 中线 + 己方原位行)+ 加分。
+  // 经典"炮二平五"开局结构,威胁中卒/打通卒林线/支持屏风马。仅 !endgame 时启用
+  // (中局/残局炮已离原位,本项不触发)。
+  if (!endgame && CENTER_CANNON_OPENING_BONUS) {
+    score += centerCannonOpeningBonus(board, aiSide);
+    score -= centerCannonOpeningBonus(board, opposite(aiSide));
+  }
   return score;
 }
 
@@ -1542,6 +1549,20 @@ function isEndgame(board) {
   return red <= ENDGAME_MATERIAL_THRESHOLD && black <= ENDGAME_MATERIAL_THRESHOLD;
 }
 
+// #58 开局阶段判定:每方非将子力均 >= OPENING_MATERIAL_THRESHOLD 时为开局。
+// isEndgame 的镜像(双方子力都尚未削减)。用于限制开局专属评估项
+// (如 CENTER_CANNON_OPENING_BONUS)只在开局阶段生效。
+function isOpening(board) {
+  let red = 0;
+  let black = 0;
+  for (const piece of livePieces(board)) {
+    if (piece.type === TYPES.GENERAL) continue;
+    if (piece.side === SIDES.RED) red += PIECE_VALUE[piece.type];
+    else black += PIECE_VALUE[piece.type];
+  }
+  return red >= OPENING_MATERIAL_THRESHOLD && black >= OPENING_MATERIAL_THRESHOLD;
+}
+
 // 残局兵推进加分:过河兵越靠近对方底线越值钱
 // 红方过河 y∈[0,4],推进深度 = 4 - y(0..4);黑方过河 y∈[5,9],推进深度 = y - 5(0..4)
 function endgameSoldierBonus(piece) {
@@ -1733,6 +1754,23 @@ function horseLegPenalty(board, side) {
     }
   }
   return -penalty;
+}
+
+// #58 Center Cannon Opening Bonus:开局阶段 side 方有炮在中线原位行时加分。
+// 中线 x=4;红方炮原位行 y=7,黑方 y=2。即"炮二平五" / "卒包炮"开局结构。
+// 仅在 !isEndgame 时调用(evaluateBoard 守卫);本函数内部再加 isOpening 守卫,
+// 确保中局丢子后(非开局)即便炮仍在原位也不加分,避免鼓励"留炮不动"。
+// 返回 side 方总加分;evaluateBoard 双向相减。
+function centerCannonOpeningBonus(board, side) {
+  if (!CENTER_CANNON_OPENING_BONUS) return 0;
+  if (!isOpening(board)) return 0;
+  const cannonHomeY = side === SIDES.RED ? 7 : 2;
+  let bonus = 0;
+  for (const piece of livePieces(board)) {
+    if (piece.side !== side || piece.type !== TYPES.CANNON) continue;
+    if (piece.x === 4 && piece.y === cannonHomeY) bonus += CENTER_CANNON_OPENING_BONUS;
+  }
+  return bonus;
 }
 
 // 王的安全评估:负数表示该方王处于风险,正数表示防守稳固。

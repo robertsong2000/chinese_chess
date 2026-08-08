@@ -1119,15 +1119,17 @@
       "phase": 12,
       "title": "Center Cannon Opening Bonus(开局中炮加分)",
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 25,
-      "attempts": 0,
+      "attempts": 1,
       "description": "开局中炮(炮在 x=4, y=0 红方 / y=9 黑方,即原位)是中国象棋开局最经典的攻击结构之一,威胁中卒/打通卒林线。当前 evaluateBoard 不识别此结构。实现:(1) constants.js 加 CENTER_CANNON_OPENING_BONUS=20;(2) search.js 加 isOpening(board) 判定(双方非将子力 > 阈值);(3) evaluateBoard 给开局阶段且炮在原位中线的炮 +BONUS;(4) 测试验证开局中炮加分、过河炮不加、残局不加。",
       "files": [
         "src/constants.js",
         "src/search.js",
         "tests/ai-search.test.js"
-      ]
+      ],
+      "completed_at": "2026-08-09T05:45:05.239324+08:00",
+      "commit_sha": "PENDING"
     },
     {
       "id": 59,
@@ -1603,6 +1605,13 @@
       "action": "completed",
       "summary": "#57 Tempo Bonus:constants.js 加 TEMPO_BONUS=15(保守值,远低于兵 100);evaluateBoard 加可选 side 参数(默认 null 保持向后兼容,保护初始对称测试);side 传入时给走子方 +TEMPO_BONUS 对方 -TEMPO_BONUS;negamax + quiescence 3 个 callsite 改为传入 side;新增 2 个测试:常量契约 + side=RED/BLACK 差 = 2*TEMPO_BONUS + 不传 side 对称性。69/69 tests pass。Phase 12 启动,4 个 TODO(#57-#60),#57 done。",
       "commit_sha": "c2fd5f943e10b983e895b287e45f199b4d7ba77b"
+    },
+    {
+      "timestamp": "2026-08-09T05:45:05.239347+08:00",
+      "todo_id": 58,
+      "action": "completed",
+      "summary": "#58 Center Cannon Opening Bonus:constants.js 加 OPENING_MATERIAL_THRESHOLD=3000(isEndgame 镜像)+ CENTER_CANNON_OPENING_BONUS=20;search.js 加 isOpening(board) + centerCannonOpeningBonus(board, side)(炮在 x=4 + 红方 y=7/黑方 y=2 即\"炮二平五\"开局结构);evaluateBoard 在 !endgame 时双向相减;4 个测试覆盖:开局中炮加分 / 过河炮不加 / 残局守卫 / evaluateBoard 集成对称性。73/73 tests pass。Phase 12 进度 2/4。",
+      "commit_sha": "PENDING"
     }
   ],
   "rules": [
@@ -1614,5 +1623,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 11 #55 Horse Leg Penalty done (0168515)。建议下一步:1) 跑长 benchmark (BENCH_LONG=1, 20 局) 验证 #55 真实效果 — 关注 hardWinRate 是否提升 + 是否出现 self-play 退化(perLeg=8 保守,但 4 腿堵局面可能扣分累积);2) Phase 11 续 TODO 候选:(a) Cannon screen stability eval(炮架稳定性:炮架易被吃时炮威胁减分,对应中局炮换子的判断);(b) Pawn structure eval(连兵/兵形,服务兵的协同推进);(c) Aspiration Window 重新启用验证(#54 跨回合 TT 复用后等价 +1 ply,窄窗口风险下降,可严格条件重试);(d) Razoring 重新启用验证(#41/#49/#51/#55 评估精度提升后,严格条件 + 大 MARGIN);(e) King Attack Zone 精化(区分威胁等级 / 加重将牌位车马炮威胁);3) 优先 (a) Cannon screen stability — 与 #55 对称(攻防两端 mobility 精化),互补价值高。"
+  "next_run_hint": "Phase 12 next: #59 Pinned Piece Mobility Penalty(被钉子的活动性归零),保守取值,防止 self-play 退化。"
 }

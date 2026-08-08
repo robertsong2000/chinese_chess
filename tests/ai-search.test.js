@@ -2047,3 +2047,125 @@ test("#57 tempo bonus: evaluateBoard(board, aiSide, side) gives side-to-move a +
     `no-side RED view should equal negative of BLACK view (symmetric), got red=${result.redViewNoSide}, black=${result.blackViewNoSide}`);
 });
 
+// #58 helper:构造一颗炮在指定位置的 board(基于 initialPieces 替换一颗炮)
+test("#58 centerCannonOpeningBonus: opening center cannon at (4, cannonHomeY) gets bonus", () => {
+  const engine = createEngine();
+  // 红方中炮:基于 initialPieces,把红方第一颗炮 (1,7) 移到 (4,7) → "炮二平五"
+  // 双方子力未削减 → isOpening=true → 应加分
+  const result = engine.json(`(() => {
+    const board = initialPieces();
+    const redCannon = board.find((p) => p.alive && p.side === SIDES.RED && p.type === TYPES.CANNON);
+    redCannon.x = 4;  // 中线
+    redCannon.y = 7;  // 红方炮原位行(已是 7,显式写明)
+
+    return {
+      isOpening: isOpening(board),
+      isEndgame: isEndgame(board),
+      redBonus: centerCannonOpeningBonus(board, SIDES.RED),
+      blackBonus: centerCannonOpeningBonus(board, SIDES.BLACK),
+      bonus: CENTER_CANNON_OPENING_BONUS,
+    };
+  })()`);
+
+  assert.equal(result.isOpening, true, "initial+single-move position should be opening");
+  assert.equal(result.isEndgame, false, "should not be endgame");
+  assert.equal(result.redBonus, result.bonus,
+    `red center cannon bonus should equal CENTER_CANNON_OPENING_BONUS(${result.bonus}), got ${result.redBonus}`);
+  assert.equal(result.blackBonus, 0,
+    `black has no center cannon, bonus should be 0, got ${result.blackBonus}`);
+});
+
+test("#58 centerCannonOpeningBonus: crossed-river cannon (x=4 but wrong y) returns 0", () => {
+  const engine = createEngine();
+  // 红方炮在 (4, 4):中线 x=4,但已过河(y=4 在敌方半场),不在原位行 y=7 → 不加中炮加分
+  const result = engine.json(`(() => {
+    const board = initialPieces();
+    const redCannon = board.find((p) => p.alive && p.side === SIDES.RED && p.type === TYPES.CANNON);
+    redCannon.x = 4;
+    redCannon.y = 4;  // 过河,但不是 cannonHomeY=7
+
+    return {
+      isOpening: isOpening(board),
+      redBonus: centerCannonOpeningBonus(board, SIDES.RED),
+    };
+  })()`);
+
+  assert.equal(result.isOpening, true, "should still be opening (no material removed)");
+  assert.equal(result.redBonus, 0,
+    `crossed-river cannon at (4,4) should not get center cannon bonus, got ${result.redBonus}`);
+});
+
+test("#58 centerCannonOpeningBonus: endgame guard - center cannon in endgame returns 0", () => {
+  const engine = createEngine();
+  // 构造残局:仅留双方将 + 红方一颗炮在 (4,7),其余删除
+  // 子力:red 450 (炮) + 0 (将不计) = 450; black 0 → 双方 <= 1800 → isEndgame=true
+  const result = engine.json(`(() => {
+    const board = initialPieces().filter((p) =>
+      p.type === TYPES.GENERAL
+      || (p.side === SIDES.RED && p.type === TYPES.CANNON && p.id.endsWith('-1'))
+    );
+    const redCannon = board.find((p) => p.alive && p.side === SIDES.RED && p.type === TYPES.CANNON);
+    redCannon.x = 4;
+    redCannon.y = 7;
+
+    return {
+      isEndgame: isEndgame(board),
+      isOpening: isOpening(board),
+      redBonus: centerCannonOpeningBonus(board, SIDES.RED),
+    };
+  })()`);
+
+  assert.equal(result.isEndgame, true, "lone cannon vs lone general should be endgame");
+  assert.equal(result.isOpening, false, "should not be opening");
+  assert.equal(result.redBonus, 0,
+    `center cannon in endgame should not get bonus (endgame guard), got ${result.redBonus}`);
+});
+
+test("#58 center cannon integration: evaluateBoard favors RED when only RED has center cannon", () => {
+  const engine = createEngine();
+  // 对称初始局面 + 把红方一颗炮挪到 (4,7) → 红方独享中炮加分
+  // 注:炮位置变化还会触发 POSITION_BONUS / mobility 等其他加分变化,故只验证方向性 + 对称性
+  //   1) evalRed > 0 (红方占优)
+  //   2) evalBlack = -evalRed (对称性:局面只对一方有利,视角相反符号相反)
+  //   3) evalRed - evalBlack >= 2 * BONUS (中炮加分至少贡献 2*BONUS 的差异)
+  // 同时与"未移动炮"的对照对比,确认中炮加分确实生效。
+  const result = engine.json(`(() => {
+    const baselineBoard = initialPieces();
+    const baselineRed = evaluateBoard(baselineBoard, SIDES.RED);
+
+    const board = initialPieces();
+    const redCannon = board.find((p) => p.alive && p.side === SIDES.RED && p.type === TYPES.CANNON);
+    redCannon.x = 4;
+    redCannon.y = 7;
+
+    return {
+      baselineRed,
+      evalRed: evaluateBoard(board, SIDES.RED),
+      evalBlack: evaluateBoard(board, SIDES.BLACK),
+      redCannonBonus: centerCannonOpeningBonus(board, SIDES.RED),
+      blackCannonBonus: centerCannonOpeningBonus(board, SIDES.BLACK),
+      bonus: CENTER_CANNON_OPENING_BONUS,
+    };
+  })()`);
+
+  // baseline 对称局面 evalRed 应 ≈ 0
+  assert.ok(Math.abs(result.baselineRed) < 1e-9,
+    `baseline evalRed should be 0 (symmetric initial), got ${result.baselineRed}`);
+
+  // 中炮函数确认:红方 +BONUS,黑方 0
+  assert.equal(result.redCannonBonus, result.bonus,
+    `centerCannonOpeningBonus(RED) should equal bonus, got ${result.redCannonBonus}`);
+  assert.equal(result.blackCannonBonus, 0,
+    `centerCannonOpeningBonus(BLACK) should be 0, got ${result.blackCannonBonus}`);
+
+  // evalRed > 0(红方占优,中炮加分 + 其他位置分共同贡献)
+  assert.ok(result.evalRed > 0,
+    `evaluateBoard(RED) should be positive when RED has center cannon, got ${result.evalRed}`);
+  // 对称性:局面只对一方有利,RED 视角 = -BLACK 视角
+  assert.ok(Math.abs(result.evalRed + result.evalBlack) < 1e-9,
+    `evalRed + evalBlack should be 0 (symmetric view), got red=${result.evalRed}, black=${result.evalBlack}`);
+  // 中炮加分至少贡献 2*BONUS 的 RED-BLACK 差
+  assert.ok(result.evalRed - result.evalBlack >= 2 * result.bonus,
+    `evalRed - evalBlack should be >= 2*bonus(${2 * result.bonus}), got ${result.evalRed - result.evalBlack}`);
+});
+
