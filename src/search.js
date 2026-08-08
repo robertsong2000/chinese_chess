@@ -478,7 +478,17 @@ function moveOrderingScore(board, move, side, aiSide, preferredMove = null, kill
   if (preferredMove && move.pieceId === preferredMove.pieceId && move.toX === preferredMove.toX && move.toY === preferredMove.toY) score += 100000;
   if (ttBestMoveKey && killerKey(move) === ttBestMoveKey) score += TT_BONUS;
   if (move.capturedPieceId) {
-    score += 50000 + pieceValueOnBoard(board, move.capturedPieceId) * 12 - pieceValueOnBoard(board, move.pieceId);
+    const captured = pieceValueOnBoard(board, move.capturedPieceId);
+    const attacker = pieceValueOnBoard(board, move.pieceId);
+    const base = 50000 + captured * 12 - attacker;
+    // 保守集成 SEE:仅对深度亏子(SEE <= -200)的 capture 显著降分到 killer 档,
+    // 其他 capture 保留原 MVV-LVA 排序。这样既识别明显送子,又不破坏大多数走法排序。
+    const seeValue = see(board, move);
+    if (seeValue <= SEE_ORDERING_LOSING_THRESHOLD) {
+      score += KILLER_BONUS_SECOND + seeValue * SEE_ORDERING_MULTIPLIER;
+    } else {
+      score += base;
+    }
   } else {
     let matchedKiller = false;
     if (killersAtPly) {
@@ -669,6 +679,54 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     ttStore(tt, hash, depth, best, flag, bestMove ? killerKey(bestMove) : null);
   }
   return best;
+}
+
+// SEE (Static Exchange Evaluation):对 capture 走法,精确计算 capture sequence 的净交换价值。
+// 返回:从 move 的 attacker side 视角的净交换价值。正 = 净赢子,负 = 净亏子,0 = 平衡/非吃子。
+// 算法:negamax 形式,双方轮流用最便宜的 attacker 吃 to 上的棋子,每方可选 stop(0) 或 continue。
+// 简化:用 pieceAttacksSquare 基于原 board 判断,忽略 attack line 变化(behind-attacker),
+// 精度足够识别大多数 losing capture。
+function see(board, move) {
+  if (!move.capturedPieceId) return 0;
+  const target = board.find((p) => p.alive && p.id === move.capturedPieceId);
+  if (!target) return 0;
+  const attacker = board.find((p) => p.alive && p.id === move.pieceId);
+  if (!attacker) return 0;
+
+  const attackerSide = attacker.side;
+  const { toX, toY } = move;
+  // attacker 已走 move 到 to,从原位置移除(用 removed 集合标记,避免 pieceAttacksSquare 误判)。
+  const removed = new Set([target.id, attacker.id]);
+
+  const findCheapestAttacker = (side) => {
+    let cheapest = null;
+    for (const piece of livePieces(board)) {
+      if (piece.side !== side) continue;
+      if (removed.has(piece.id)) continue;
+      // GENERAL 不参与 capture sequence(飞将规则只对吃对方将生效,
+      // SEE 中忽略以避免 flyingGeneral 误判 + 提升性能)
+      if (piece.type === TYPES.GENERAL) continue;
+      if (!pieceAttacksSquare(board, piece, toX, toY)) continue;
+      if (!cheapest || PIECE_VALUE[piece.type] < PIECE_VALUE[cheapest.type]) {
+        cheapest = piece;
+      }
+    }
+    return cheapest;
+  };
+
+  // negamax:从 side 视角,side 选 max(0, captured_value - opponent_best)
+  // currentOccupierValue:to 上当前占据者的价值(side 决定是否吃它)
+  const seeRec = (side, currentOccupierValue, depthLeft) => {
+    if (depthLeft <= 0) return 0;
+    const cheapest = findCheapestAttacker(side);
+    if (!cheapest) return 0;
+    removed.add(cheapest.id);
+    const next = currentOccupierValue - seeRec(opposite(side), PIECE_VALUE[cheapest.type], depthLeft - 1);
+    removed.delete(cheapest.id);
+    return Math.max(0, next);
+  };
+
+  return PIECE_VALUE[target.type] - seeRec(opposite(attackerSide), PIECE_VALUE[attacker.type], SEE_MAX_DEPTH);
 }
 
 function quiescence(board, side, alpha, beta, aiSide, depth, deadline, legalMoves = null) {

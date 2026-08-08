@@ -64,6 +64,16 @@ const LMR_REDUCTION = 1;
 const NULL_MOVE_MIN_DEPTH = 3;
 const NULL_MOVE_REDUCTION = 2;
 
+// === SEE (Static Exchange Evaluation) ===
+// 静态交换评估:对 capture 走法,精确计算 capture sequence 的净交换价值。
+// 直接服务"完全不送子"目标:识别"会被反吃"的亏子捕获,在 move ordering 中合理处理。
+const SEE_MAX_DEPTH = 16; // capture sequence 最大深度,防递归过深
+// move ordering:SEE <= 此阈值视为"深度亏子",capture 排序降到 killer 档
+// 阈值放宽,只识别明显的亏子(避免误判战术性牺牲)
+const SEE_ORDERING_LOSING_THRESHOLD = -200;
+// move ordering:深度亏子 capture 的 SEE 折扣系数
+const SEE_ORDERING_MULTIPLIER = 8;
+
 // === Time management ===
 // 基准思考时间(benchmark 用 timeScale 包装 performance.now,此处维持原值以确保 wall clock 可控)。
 // hard 通过 allocateTimeFactor 动态调整:残局/受困多想,开局/复杂少想,关键局面延伸深度。
