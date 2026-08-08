@@ -770,8 +770,21 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
   if (allowNull && depth >= NULL_MOVE_MIN_DEPTH && !inCheck && beta < Infinity && beta > -Infinity) {
     const nullScore = -negamax(board, opposite(side), depth - 1 - NULL_MOVE_REDUCTION, -beta, -beta + 1, aiSide, tt, deadline, ply + 1, killers, history, false, extensionsInLine, true, counterMoves, null);
     if (nullScore >= beta) {
-      if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, null);
-      return beta;
+      // Verified NMP:节点足够深时,做一次 reduced real move search 复核。
+      // 防残局 zugzwang(让一步反而更好)+ hidden tactical refutation。
+      // verify search 自身 depth=depth-1-NULL_MOVE_VERIFY_REDUCTION=depth-2,depth>=5 时 verify 内部
+      // depth=3-4,低于 NULL_MOVE_VERIFY_MIN_DEPTH=5,不会再触发 verify(无递归)。
+      if (depth >= NULL_MOVE_VERIFY_MIN_DEPTH) {
+        const verifyScore = negamax(board, side, depth - 1 - NULL_MOVE_VERIFY_REDUCTION, beta - 1, beta, aiSide, tt, deadline, ply, killers, history, false, extensionsInLine, true, counterMoves, null);
+        if (verifyScore >= beta) {
+          if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, null);
+          return beta;
+        }
+        // verify 失败:不信任 null cutoff,fall-through 到完整搜索
+      } else {
+        if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, null);
+        return beta;
+      }
     }
   }
   const moves = allLegalMoves(board, side);

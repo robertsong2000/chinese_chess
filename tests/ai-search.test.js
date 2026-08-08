@@ -1259,3 +1259,90 @@ test("#45 history malus: tactical scenario verification", () => {
   assert.ok(result.isCorrect,
     `hard AI should find horse capture of unprotected chariot (6,3)→(5,5), got piece=${result.pieceType} to=(${result.toX},${result.toY})`);
 });
+
+test("#47 Verified NMP: constants contract + recursion safety", () => {
+  // 契约:
+  // - NULL_MOVE_VERIFY_MIN_DEPTH >= 5:浅节点 verify overhead 大于收益,只在足够深节点复核。
+  // - NULL_MOVE_VERIFY_REDUCTION >= 1:verify search 深度 = depth - 1 - VERIFY_RED。
+  // - 递归安全:depth=VERIFY_MIN_DEPTH 时 verify 内部 depth = VERIFY_MIN_DEPTH - 1 - VERIFY_RED
+  //   必须 < VERIFY_MIN_DEPTH,即 NULL_MOVE_REDUCTION - NULL_MOVE_VERIFY_REDUCTION >= 1。
+  //   直观:null search depth=depth-1-R,verify search 比 null 多看 1 ply,
+  //   即 verify_search_depth = (depth-1-R) + 1 = depth-R,低于 VERIFY_MIN_DEPTH=R+... 时不会递归。
+  //   这里校验深度数值边界(实际实现中 verify search 自己的 depth=depth-1-VR,需低于 VERIFY_MIN)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const minDepthOk = NULL_MOVE_VERIFY_MIN_DEPTH >= 5;
+    const reductionOk = NULL_MOVE_VERIFY_REDUCTION >= 1;
+    const reductionLtR = NULL_MOVE_VERIFY_REDUCTION < NULL_MOVE_REDUCTION;
+    // 递归安全:depth = NULL_MOVE_VERIFY_MIN_DEPTH 时,verify search depth
+    //           = NULL_MOVE_VERIFY_MIN_DEPTH - 1 - NULL_MOVE_VERIFY_REDUCTION
+    //           必须 < NULL_MOVE_VERIFY_MIN_DEPTH(否则会递归触发 verify)
+    const verifyDepthAtBoundary = NULL_MOVE_VERIFY_MIN_DEPTH - 1 - NULL_MOVE_VERIFY_REDUCTION;
+    const recursionSafe = verifyDepthAtBoundary < NULL_MOVE_VERIFY_MIN_DEPTH;
+    // verify 必须 < NULL_MOVE_VERIFY_MIN_DEPTH(否则会无限递归)
+    // 例如 VERIFY_MIN=5, VERIFY_RED=1:depth=5 触发 verify,verify 内部 depth=3 < 5 ✓
+    return {
+      minDepth: NULL_MOVE_VERIFY_MIN_DEPTH,
+      reduction: NULL_MOVE_VERIFY_REDUCTION,
+      nullReduction: NULL_MOVE_REDUCTION,
+      minDepthOk,
+      reductionOk,
+      reductionLtR,
+      verifyDepthAtBoundary,
+      recursionSafe,
+    };
+  })()`);
+  assert.ok(result.minDepthOk,
+    `NULL_MOVE_VERIFY_MIN_DEPTH should be >= 5 (shallow nodes overhead), got ${result.minDepth}`);
+  assert.ok(result.reductionOk,
+    `NULL_MOVE_VERIFY_REDUCTION should be >= 1, got ${result.reduction}`);
+  assert.ok(result.reductionLtR,
+    `VERIFY_REDUCTION (${result.reduction}) should be < NULL_MOVE_REDUCTION (${result.nullReduction}) so verify search sees deeper than null search`);
+  assert.ok(result.recursionSafe,
+    `verify search depth at boundary (${result.verifyDepthAtBoundary}) must be < VERIFY_MIN_DEPTH (${result.minDepth}) to prevent infinite recursion`);
+});
+
+test("#47 Verified NMP: endgame tactic — hard AI still finds chariot capture despite NMP verify overhead", () => {
+  // Verified NMP 在 depth>=5 时做一次额外 real-move search 复核,理论上增加 overhead
+  // 但不应破坏既有战术能力。本测试构造一个简单的"残局送子"局面:
+  // 棋盘上仅剩双方将 + 红车 + 黑车,红车吃黑车(无保护)。
+  // 关键:这是 endgame(子力 < 1800),触发 verified NMP 的潜在场景(zugzwang 区域)。
+  // 验收:hard AI 必须找到 (5,5)→(5,2) 吃黑车(无保护)。
+  // 注:红将 (3,9) 黑将 (4,0) 错开列,避免飞将绝杀提前结束(飞将比吃车更优,AI 会先飞将)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    // 局面:红将在 (3,9),黑将在 (4,0),红车在 (5,5),黑车在 (5,2)(无保护)
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 5, y: 5, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 5, y: 2, alive: true },
+    ];
+    state = createGame(SIDES.RED, "hard");
+    state.status = "playing";
+    state.currentSide = SIDES.RED;
+    state.board = board;
+    state.snapshots = [];
+    state.moveHistory = [];
+
+    const realNow = performance.now.bind(performance);
+    const timeScale = 1100 / 300;
+    performance.now = function () { return realNow() * timeScale; };
+    let move = null;
+    try { move = chooseAIMove(); } finally { performance.now = realNow; }
+
+    return {
+      found: !!move,
+      pieceType: move && move.pieceType,
+      fromX: move && move.fromX,
+      fromY: move && move.fromY,
+      toX: move && move.toX,
+      toY: move && move.toY,
+      isCorrect: move && move.pieceType === TYPES.CHARIOT
+        && move.fromX === 5 && move.fromY === 5
+        && move.toX === 5 && move.toY === 2,
+    };
+  })()`);
+  assert.ok(result.isCorrect,
+    `hard AI in endgame (verified NMP territory) should capture free enemy chariot (5,5)→(5,2), got piece=${result.pieceType} from=(${result.fromX},${result.fromY}) to=(${result.toX},${result.toY})`);
+});

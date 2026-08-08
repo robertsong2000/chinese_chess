@@ -81,6 +81,18 @@ const LMR_FULL_MOVE_COUNT = 3;
 const LMR_REDUCTION = 1;
 const NULL_MOVE_MIN_DEPTH = 3;
 const NULL_MOVE_REDUCTION = 2;
+// === Verified NMP ===
+// 经典 Stockfish 技术:null move 触发 cutoff(nullScore>=beta)时,若节点足够深,
+// 再做一次 reduced 真实走法搜索(同 side,depth-1-VERIFY_REDUCTION)复核。
+// verifyScore>=beta 才确认 cutoff,否则 fall-through 走完整搜索。
+// 防止两类经典 NMP bug:1) 残局 zugzwang(让一步比走一步好,NMP 误判);
+// 2) hidden tactical refutation(reduced null 搜索深度不够看不到)。
+// VERIFY_MIN_DEPTH=5:浅节点 verify overhead 大于收益,只在深度 >=5 时复核。
+// VERIFY_REDUCTION=1:verify 比 null search 真实深度多 1 ply(NULL_MOVE_REDUCTION-VERIFY_REDUCTION=1),
+// 即深度足够看到 null search 错过的战术。verify 自身深度 = depth-2,低于 VERIFY_MIN_DEPTH=5,
+// 不会无限递归(depth>=5 才 verify,verify 内部 depth=3-4 不会再 verify)。
+const NULL_MOVE_VERIFY_MIN_DEPTH = 5;
+const NULL_MOVE_VERIFY_REDUCTION = 1;
 
 // === Check Extension ===
 // 经典选择性延伸:走法给对手造成将军时,该线深度 +1 ply。
