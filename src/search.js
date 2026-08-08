@@ -735,10 +735,15 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
   const hash = tt ? computeZobrist(board, side) : 0;
   const origAlpha = alpha;
   let ttBestMoveKey = null;
+  // #46 Singular Extension 需要读取 ttEntry.score 与 ttEntry.flag,故保留整个 entry 引用。
+  let ttEntry = null;
   if (tt) {
     const probed = ttProbe(tt, hash, depth, alpha, beta);
     if (typeof probed === "number") return probed;
-    if (probed) ttBestMoveKey = probed.bestMoveKey;
+    if (probed) {
+      ttBestMoveKey = probed.bestMoveKey;
+      ttEntry = probed;
+    }
   }
   // === Internal Iterative Deepening (IID) ===
   // 无 TT best move + 深层 + 内部节点 → 做 reduced-depth pre-search populate TT,
@@ -752,6 +757,7 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     const reprobe = ttProbe(tt, hash, depth, alpha, beta);
     if (reprobe && typeof reprobe !== "number" && reprobe.bestMoveKey) {
       ttBestMoveKey = reprobe.bestMoveKey;
+      ttEntry = reprobe;
     }
   }
   if (depth === 0) {
@@ -833,6 +839,42 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     && depth <= LMP_MAX_DEPTH
     && beta - alpha > LMP_MIN_WINDOW;
 
+  // === Singular Extension (#46) verification ===
+  // TT entry 是 LOWER bound(beta cutoff)+ 深层 + 非 check + 有 best move →
+  // 验证 TT best move 是否"独招":其他走法的 score 是否都低于 ttScore - MARGIN。
+  // 实现:对每个非 TT best move 做 zero-window probe(reduced depth),任一 fail-low 即否决。
+  // 详见 constants.js SINGULAR_* 注释。
+  let singularMoveKey = null;
+  if (
+    SINGULAR_ENABLED
+    && ttEntry
+    && ttEntry.bestMoveKey
+    && ttEntry.flag === TT_FLAG_LOWER
+    && ttEntry.depth >= SINGULAR_MIN_DEPTH
+    && depth >= SINGULAR_MIN_DEPTH
+    && extensionsInLine < MAX_CHECK_EXTENSIONS_PER_LINE + MAX_SINGULAR_EXTENSIONS_PER_LINE
+    && !inCheck
+    && alpha > -Infinity
+    && beta < Infinity
+  ) {
+    const exclusiveBound = ttEntry.score - SINGULAR_MARGIN; // 走法 score >= 此值视为"竞争性"
+    const childAlpha = -exclusiveBound;
+    const childBeta = -exclusiveBound + 1;
+    const verifyDepth = Math.max(0, depth - 1 - SINGULAR_REDUCTION);
+    let singularConfirmed = true;
+    for (let j = 0; j < moves.length; j += 1) {
+      const mv = moves[j];
+      if (killerKey(mv) === ttEntry.bestMoveKey) continue;
+      if (performance.now() > deadline) { singularConfirmed = false; break; }
+      const childB = applyMoveToBoard(board, mv);
+      // iidAllowed=false:验证搜索不递归 IID(开销不可控)
+      const c = negamax(childB, opposite(side), verifyDepth, childAlpha, childBeta, aiSide, tt, deadline, ply + 1, killers, history, true, extensionsInLine, false, counterMoves, mv);
+      // child fail-low(c <= childAlpha)⟺ side score >= exclusiveBound ⟺ mv 竞争性 ⟺ 非 singular
+      if (c <= childAlpha) { singularConfirmed = false; break; }
+    }
+    if (singularConfirmed) singularMoveKey = ttEntry.bestMoveKey;
+  }
+
   let best = -Infinity;
   let bestMove = null;
   let didCut = false;
@@ -855,8 +897,13 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     const givesCheck = depth >= CHECK_EXTENSION_MIN_DEPTH
       && extensionsInLine < MAX_CHECK_EXTENSIONS_PER_LINE
       && isInCheck(childBoard, opposite(side));
-    const extDepth = givesCheck ? depth - 1 + CHECK_EXTENSION_PLY : depth - 1;
-    const childExt = givesCheck ? extensionsInLine + 1 : extensionsInLine;
+    // #46 Singular extension:TT best move 经验证为"独招"时 +1 ply。
+    // 与 check extension 共享 extensionsInLine 计数器(总延伸上限 = MAX_CHECK + MAX_SINGULAR = 3)。
+    const isSingular = singularMoveKey !== null
+      && killerKey(move) === singularMoveKey
+      && extensionsInLine < MAX_CHECK_EXTENSIONS_PER_LINE + MAX_SINGULAR_EXTENSIONS_PER_LINE;
+    const extDepth = (givesCheck ? depth - 1 + CHECK_EXTENSION_PLY : depth - 1) + (isSingular ? 1 : 0);
+    const childExt = (givesCheck ? extensionsInLine + 1 : extensionsInLine) + (isSingular ? 1 : 0);
     // Futility pruning:i>=1(保留首走法确保 bestMove 非空)+ futile 节点 + quiet 非 check 走法 → 跳过。
     // capture/check 走法仍搜索,因为它们是战术性强走,有改 alpha 的可能。
     if (i >= 1 && futilityPrunable && !isTactical && !givesCheck) {

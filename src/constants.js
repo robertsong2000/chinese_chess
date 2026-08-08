@@ -223,6 +223,37 @@ const IID_REDUCTION = 2;
 // Bonus 取值:介于 KILLER_BONUS_SECOND(7000)与 HISTORY_MAX_BONUS(6000)之间。
 const COUNTERMOVE_BONUS = 6500;
 
+// === Singular Extension (#46) ===
+// 经典 Stockfish/Deep Blue 选择性延伸:TT 中某走法是 LOWER bound entry(beta cutoff),
+// 当 depth >= 阈值时,验证该走法是否"唯一最佳"——其他所有走法的 score 都至少低 MARGIN。
+// 若验证通过(singular),主搜索中给该走法 +1 ply extension。
+// 直接服务"看 5-7 步":关键局面(只有一招能赢/守)多看一步 → 减少误判,直接服务棋力 2200。
+//
+// 触发条件(保守):
+//   - depth >= SINGULAR_MIN_DEPTH(=4):浅节点验证收益低于开销
+//   - TT flag = TT_FLAG_LOWER(可靠 beta cutoff 信号;EXACT/UPPER 信号弱)
+//   - !inCheck:将军节点已有 evasion 框架,singular 语义不准
+//   - 有 TT best move(`ttEntry.bestMoveKey`)
+//
+// Verification(逐走法 probe):
+//   - 对每个非 TT best move,以 reduced depth(depth - 1 - REDUCTION)做 zero-window probe
+//   - exclusiveBound = ttScore - MARGIN,childAlpha = -exclusiveBound,childBeta = -exclusiveBound + 1
+//   - 任一走法 fail-low(childReturn <= childAlpha)→ 该走法 score ≥ exclusiveBound → 竞争性 → 非 singular
+//   - 所有走法均 fail-high → singular 成立
+//   - 任意走法命中即 early-stop(O(1) 平均开销)
+//
+// 取值依据:
+//   - MARGIN = 60 ≈ 0.6 兵价值,只识别明显"独招",避免误判扩散
+//   - REDUCTION = 2:与 IID_REDUCTION 一致;reduced depth 比主搜索便宜 8x
+//   - MAX_SINGULAR_EXTENSIONS_PER_LINE = 1:每条搜索线最多 1 次 singular extension
+//     (与 check extension 的 MAX_CHECK_EXTENSIONS_PER_LINE=2 共享 extensionsInLine 计数器,
+//      总延伸上限 = MAX_CHECK + MAX_SINGULAR = 3,防止延伸爆炸)
+const SINGULAR_ENABLED = true;
+const SINGULAR_MIN_DEPTH = 4;
+const SINGULAR_MARGIN = 60;
+const SINGULAR_REDUCTION = 2;
+const MAX_SINGULAR_EXTENSIONS_PER_LINE = 1;
+
 // === Time management ===
 // 基准思考时间(benchmark 用 timeScale 包装 performance.now,此处维持原值以确保 wall clock 可控)。
 // hard 通过 allocateTimeFactor 动态调整:残局/受困多想,开局/复杂少想,关键局面延伸深度。
