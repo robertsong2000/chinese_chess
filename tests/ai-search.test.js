@@ -720,14 +720,16 @@ test("#36 endgame pattern bonus returns 0 in non-endgame (midgame guard)", () =>
   );
 });
 
-test("#35 benchmark tactics: 5 puzzles with valid contract", () => {
-  // 契约:#35 benchmark 扩展必须含 5 个战术题,每题有 id/name/side/boardSrc/expectSrc。
-  // side 必须是 RED 或 BLACK(交替,覆盖红黑两方战术),且谓词 expectSrc 必须是非空字符串。
+test("#42 benchmark tactics: 10 puzzles with valid contract", () => {
+  // 契约:#42 扩展 tactics 从 5 → 10 题,涵盖 capture (chariot/horse/soldier/cannon) /
+  // fork / defensive-counter / nested-cannon 等多战术类型。
+  // 每题有 id/name/side/boardSrc/expectSrc;side 覆盖红黑两方;谓词 expectSrc 是非空字符串引用 move。
   const { TACTICS } = require("./ai-benchmark");
-  assert.equal(TACTICS.length, 5, "TACTICS should have exactly 5 puzzles");
+  assert.ok(TACTICS.length >= 10, `TACTICS should have >= 10 puzzles, got ${TACTICS.length}`);
 
   const ids = TACTICS.map((t) => t.id);
-  assert.deepEqual(ids, ["T1", "T2", "T3", "T4", "T5"], "TACTICS ids should be T1-T5");
+  assert.deepEqual(ids.slice(0, 10), ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10"],
+    "TACTICS ids should start with T1-T10");
 
   const sides = new Set(TACTICS.map((t) => t.side));
   assert.ok(sides.has("RED") && sides.has("BLACK"), "TACTICS should cover both RED and BLACK sides");
@@ -741,6 +743,19 @@ test("#35 benchmark tactics: 5 puzzles with valid contract", () => {
     assert.ok(t.boardSrc.includes("TYPES.GENERAL"), `${t.id}: boardSrc must include a general`);
     assert.ok(t.boardSrc.includes("alive: true"), `${t.id}: pieces must have alive: true`);
   }
+
+  // #42 多样性契约:T6-T10 必须涵盖至少 4 种不同 pieceType 的 expectSrc(扩展 capture 类型)
+  const t6to10 = TACTICS.slice(5, 10);
+  const pieceTypeMentions = new Set();
+  for (const t of t6to10) {
+    const matches = t.expectSrc.match(/TYPES\.[A-Z]+/g) || [];
+    matches.forEach((m) => pieceTypeMentions.add(m));
+  }
+  // T6-T10 应提及至少 CHARIOT/HORSE/CANNON/SOLDIER/GENERAL 中的 4 种
+  const expectedTypes = ["TYPES.CHARIOT", "TYPES.HORSE", "TYPES.CANNON", "TYPES.SOLDIER", "TYPES.GENERAL"];
+  const coveredTypes = expectedTypes.filter((t) => pieceTypeMentions.has(t));
+  assert.ok(coveredTypes.length >= 4,
+    `T6-T10 should cover >= 4 pieceTypes, got ${coveredTypes.length} (${coveredTypes.join(",")})`);
 });
 
 test("#39 LMP constants are configured for safe shallow forward pruning", () => {

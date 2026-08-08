@@ -3,7 +3,8 @@ const path = require("node:path");
 const { createEngine } = require("./engine-harness");
 
 // #35 默认自对弈 8 局(可被 BENCH_GAMES 覆盖),并新增 5 个战术题(tactics)。
-const GAMES = Number(process.env.BENCH_GAMES || 8);
+// #42 长模式:BENCH_LONG=1 时默认 20 局(可被 BENCH_GAMES 进一步覆盖)。
+const GAMES = Number(process.env.BENCH_GAMES || (process.env.BENCH_LONG === "1" ? 20 : 8));
 const MAX_PLY = Number(process.env.BENCH_MAX_PLY || 80);
 const NO_CAPTURE_DRAW_PLY = Number(process.env.BENCH_DRAW_PLY || 30);
 const HARD_DEADLINE_MS = Number(process.env.BENCH_HARD_MS || 300);
@@ -192,6 +193,84 @@ const TACTICS = [
     // 红车 (3,5)→(3,0)(攻击 0 行)或 →(4,5)(攻击 4 列将军)
     // 红将 (4,9)→(4,0) 直接飞将吃黑将也算通过(4 列中间空,合法绝杀)
     expectSrc: `(move && ((move.pieceType === TYPES.CHARIOT && (move.toX === 4 || move.toY === 0)) || (move.pieceType === TYPES.GENERAL && move.toX === 4 && move.toY === 0)))`,
+  },
+  // #42 扩展 tactics:T6-T10 覆盖更多战术类型(cannon capture / soldier capture / defensive counter / fork / nested cannon)
+  {
+    id: "T6",
+    name: "炮通过架子吃无保护马(cannon capture via screen)",
+    description: "红炮 (3,9) 通过红士 (3,7) 作炮架吃无保护黑马 (3,5);验证 hard AI 识别炮的 capture-via-screen 走法",
+    boardSrc: `[
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 3, y: 5, alive: true },
+      { id: 'ra', side: SIDES.RED, type: TYPES.ADVISOR, x: 3, y: 7, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CANNON, x: 3, y: 9, alive: true },
+      { id: 'rs', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 5, alive: true }
+    ]`,
+    side: "RED",
+    // 红炮 (3,9) → (3,5) 吃黑马(中间 1 子 (3,7) 红士作架子)
+    // 4 列中间有红兵挡住飞将
+    expectSrc: `(move && move.pieceType === TYPES.CANNON && move.toX === 3 && move.toY === 5)`,
+  },
+  {
+    id: "T7",
+    name: "过河兵吃高价值子(soldier trade-up)",
+    description: "红兵 (4,5) 直走吃黑马 (4,4),+330 净得;验证 hard AI 识别兵的 capture 升变",
+    boardSrc: `[
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 4, y: 4, alive: true },
+      { id: 'rs', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 5, alive: true }
+    ]`,
+    side: "RED",
+    // 红兵 (4,5) → (4,4) 吃黑马(兵直走 1 步,合法)
+    expectSrc: `(move && move.pieceType === TYPES.SOLDIER && move.toX === 4 && move.toY === 4)`,
+  },
+  {
+    id: "T8",
+    name: "防守反吃将军子(defensive counter-capture)",
+    description: "红车 (4,5) 将军黑将,黑车 (4,8) 反吃红车解将 + 得子;验证 hard AI 选最优防守(吃子 > 跑将)",
+    boardSrc: `[
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 4, y: 5, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 4, y: 8, alive: true }
+    ]`,
+    side: "BLACK",
+    // 黑车 (4,8) → (4,5) 吃红车(同列,中间 (4,6)(4,7) 空,合法车吃)
+    // 同时解将 + 得车(等价交换 + 解将,优于跑将)
+    expectSrc: `(move && move.pieceType === TYPES.CHARIOT && move.toX === 4 && move.toY === 5)`,
+  },
+  {
+    id: "T9",
+    name: "红马 fork 黑车 + 黑炮(horse fork - RED side)",
+    description: "红马 (4,6) 走日同时威胁黑车 (3,4) + 黑炮 (5,4),选吃其一;T2 反方版本,扩展 fork 战术覆盖",
+    boardSrc: `[
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 3, y: 4, alive: true },
+      { id: 'ba', side: SIDES.BLACK, type: TYPES.CANNON, x: 5, y: 4, alive: true },
+      { id: 'rh', side: SIDES.RED, type: TYPES.HORSE, x: 4, y: 6, alive: true }
+    ]`,
+    side: "RED",
+    // 红马 (4,6)→(3,4) 吃车 或 (4,6)→(5,4) 吃炮(都是马走日,马腿 (4,5) 空)
+    expectSrc: `(move && move.pieceType === TYPES.HORSE && ((move.toX === 3 && move.toY === 4) || (move.toX === 5 && move.toY === 4)))`,
+  },
+  {
+    id: "T10",
+    name: "双炮重叠:后炮通过前炮吃车(nested cannon capture)",
+    description: "红后炮 (4,9) 通过红前炮 (4,7) 作炮架吃黑车 (4,5);将错开列避免前炮 (4,7) 通过车作架子直接吃将;验证 hard AI 识别炮的多层 capture-via-screen",
+    boardSrc: `[
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 5, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 3, y: 0, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 4, y: 5, alive: true },
+      { id: 'rc1', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 7, alive: true },
+      { id: 'rc2', side: SIDES.RED, type: TYPES.CANNON, x: 4, y: 9, alive: true }
+    ]`,
+    side: "RED",
+    // 红后炮 (4,9) → (4,5) 吃黑车(中间 1 子 (4,7) 红前炮作架子)
+    // 前炮 (4,7) 不能直接吃车(中间 (4,6) 空无架子);红将在 (5,9) 避免任何飞将
+    expectSrc: `(move && move.pieceType === TYPES.CANNON && move.toX === 4 && move.toY === 5)`,
   },
 ];
 
