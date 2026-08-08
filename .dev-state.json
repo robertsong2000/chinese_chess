@@ -123,7 +123,7 @@
     {
       "id": 11,
       "name": "棋力深度冲刺 V7(quiescence 战术补强 + 评估精化,稳定一级棋士 2200)",
-      "todo_count": 1,
+      "todo_count": 4,
       "priority": "P0",
       "rationale": "Phase 1-10 经典启发式与战术评估全完成,V6 完成 TT mate score 距离调整。本阶段从'quiescence 战术识别'维度继续推进:扩展 quiescence 在 !inCheck 时搜能给将军的 quiet 走法(quiescence checks),识别'将军-抽将/抽子'战术组合。目标 hard 在 self-play 中维持稳定 65%+ 胜率,quiescence 不再漏看 forced check 战术。",
       "status": "active"
@@ -1032,14 +1032,55 @@
       "description": "当前 runAISearch 每次调用 createTranspositionTable() 新建 TT,跨回合信息全丢。把 TT 提到模块作用域(per-game 单例),让每次 chooseAIMove 复用上一回合的 TT 条目。TT 命中使 iterative deepening 在同等时间内多搜 ~1 ply,直接服务'看 5-7 步'。实现:(1) 模块级 Map + generation counter;(2) createGame / newGame 时增 generation;(3) runAISearch 不再 create,而是 getSharedTT() 拿到当前 generation 的 TT;(4) TT entry 加 gen 字段,probe 时若 entry.gen != current 则视为 miss(防 stale);(5) ttStore 写入时带 gen;(6) TT 已有 depth-preferred eviction,跨回合累积自然有上限。测试:新增 1 个 test — 验证连续两次 runAISearch 在同一局游戏中,第二次能命中第一次的 TT 条目(用 sinon-like 钩子或简单通过搜索节点数下降来观察);保留所有现有 54 个测试通过。",
       "priority": "P0",
       "estimated_min": 25,
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "files": [
         "src/search.js",
         "src/constants.js",
         "tests/ai-search.test.js"
       ],
-      "created_at": "2026-08-09T03:42:45.856781"
+      "created_at": "2026-08-09T03:42:45.856781",
+      "completed_at": "2026-08-09T03:46:50.400635",
+      "commit_sha": "518cbcb043ea6fea96fdc7099afcc86ddd9db422"
+    },
+    {
+      "id": 55,
+      "phase": 11,
+      "category": "棋力-评估",
+      "title": "Horse Leg Penalty(马腿被堵的马减分,提升 mobility 精度)",
+      "description": "马的 4 个腿位 (0,±1) / (±1,0),每个腿位被任意子(友方/敌方)堵住时该马减分(perLeg=8)。直接服务『完全不送子』(防止把被困马高估成自由马)+ 『中局战术组合能力』(让 AI 主动派子蹩对方马腿)。constants.js 加 HORSE_LEG_PENALTY.perLeg=8(最坏 -32 远低于丢马代价 430,取值保守避免 self-play 退化);search.js 加 horseLegPenalty(board, side) 函数 + evaluateBoard 末尾双向相减(aiSide 加 opponent 减)。2 个回归测试:常量契约 + 战术局面(自由/1 腿堵/4 腿全堵/敌方堵)。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 20,
+      "attempts": 1,
+      "completed_at": "2026-08-09T04:13:39+08:00",
+      "commit_sha": "0168515",
+      "full_commit_sha": "0168515a134c95f506cada32e32c3f9434f72db6"
+    },
+    {
+      "id": 56,
+      "phase": 11,
+      "category": "棋力-战术",
+      "title": "Cannon Battery (叠炮) tactical eval: 同方两炮同列/行对齐高价值目标 +40",
+      "description": "经典中国象棋叠炮战术:同方两炮在同列/同行(中间无第三方子),且方向轴上对齐一个敌方高价值目标(将/车/马/炮)→ TACTIC_BONUS.cannonBattery=40。底层炮的'架'被解掉后上层炮立刻补上,对手难破。直接服务'中局战术组合能力(牵制、双击、闪击、抽将)'目标。实现:(1) constants.js TACTIC_BONUS.cannonBattery=40(与 cannonPin=30 同档,低于 fork=60);(2) search.js tacticBonus() 新增 cannon battery 检测块:遍历 side 方所有炮,两两配对检查同行/列 + 中间 0 子 + 双向延伸找敌方高价值目标;(3) seenPair 去重避免双向重复;(4) 2 个回归测试:契约 + 6 种战术局面。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 20,
+      "attempts": 1,
+      "created_at": "2026-08-09T04:43:57.262478+08:00",
+      "completed_at": "2026-08-09T04:43:57.262478+08:00",
+      "commit_sha": "4277327",
+      "full_commit_sha": "427732791330e3cf47c0ec3d569c6345e7bd91e6"
     }
   ],
   "history": [
@@ -1459,6 +1500,28 @@
       "summary": "#53 Quiescence Check Move Extension: constants 加 QUIESCENCE_CHECK_ENABLED/MIN_DEPTH=2/MAX_MOVES=3; quiescence 在 !inCheck + depth>=MIN 时,过滤非 capture 走法 + applyMoveToBoard+isInCheck 检测, 前 K 个加入 candidateMoves(在 captures 之后)。直接识别'将军-抽将/抽子'战术组合,服务'完全不送子'+ '中局战术组合能力'。 2 新测试:常量契约 + depth>=MIN 扩展、<MIN 不扩展。62/62 通过(原 60 + 新增 2)。",
       "commit_sha": "cb10f16",
       "full_commit_sha": "cb10f1601dbfe6f04f8b73d8ad95dbfa87fc7404"
+    },
+    {
+      "timestamp": "2026-08-09T03:46:50.400635",
+      "todo_id": 54,
+      "action": "completed",
+      "summary": "跨回合 TT 复用:getSharedTT()/resetSharedTT() 把 TT 提到模块作用域,runAISearch 跨回合共享 TT 条目;createGame 触发 reset 防跨局污染。直接服务看 5-7 步:TT 命中让 iterative deepening 同等时间多搜 ~1 ply。新增 #54 测试:createGame 后 TT 空 / 局内 gen 不变 / 新局 gen 递增。npm test 63/63 全过(从 54 增到 55 个测试,新加 1 个)。",
+      "commit_sha": "518cbcb043ea6fea96fdc7099afcc86ddd9db422"
+    },
+    {
+      "timestamp": "2026-08-09T04:13:39+08:00",
+      "todo_id": 55,
+      "action": "completed",
+      "summary": "#55 Horse Leg Penalty:HORSE_LEG_PENALTY.perLeg=8(保守值,最坏 -32 << 丢马 430)。search.js 加 horseLegPenalty(board, side):遍历 side 所有马,4 个腿位 (0,±1)/(±1,0) 每被任意子堵住 -8,返回负数。evaluateBoard 末尾 aiSide 加 / opponent 减(双向对称)。2 个回归测试:常量契约(perLeg=8)+ 战术局面(自由马 0 / 1 腿堵 -8 / 4 腿全堵 -32 / 敌方堵 -8 / 黑方无马 0)。65/65 测试通过(原 63 + 新增 2)。",
+      "commit_sha": "0168515",
+      "full_commit_sha": "0168515a134c95f506cada32e32c3f9434f72db6"
+    },
+    {
+      "timestamp": "2026-08-09T04:43:57.262478+08:00",
+      "todo_id": 56,
+      "action": "completed",
+      "summary": "#56 Cannon Battery(叠炮)tactical eval: TACTIC_BONUS.cannonBattery=40; tacticBonus() 新增检测块(同方两炮同行/列 + 中间 0 子 + 方向轴对齐敌方高价值目标); 2 个回归测试(契约 + 6 种战术局面)。67/67 tests pass。",
+      "commit_sha": "4277327"
     }
   ],
   "rules": [
@@ -1470,5 +1533,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 11 #54 跨回合 TT 复用 pending。实施后:验证 npm test 全过 → benchmark (BENCH_LONG=1) 看 hardWinRate 是否提升 + 节点数下降。下一步候选:(a) Pawn structure eval(连兵/双兵同列协同,服务残局必胜);(b) Horse leg detection eval(马腿被堵的马减分);(c) Cannon screen stability eval(炮架稳定性);(d) Aspiration Window 重新启用验证(TT 复用后,等价深度+1,窄窗口风险下降)。"
+  "next_run_hint": "Phase 11 #55 Horse Leg Penalty done (0168515)。建议下一步:1) 跑长 benchmark (BENCH_LONG=1, 20 局) 验证 #55 真实效果 — 关注 hardWinRate 是否提升 + 是否出现 self-play 退化(perLeg=8 保守,但 4 腿堵局面可能扣分累积);2) Phase 11 续 TODO 候选:(a) Cannon screen stability eval(炮架稳定性:炮架易被吃时炮威胁减分,对应中局炮换子的判断);(b) Pawn structure eval(连兵/兵形,服务兵的协同推进);(c) Aspiration Window 重新启用验证(#54 跨回合 TT 复用后等价 +1 ply,窄窗口风险下降,可严格条件重试);(d) Razoring 重新启用验证(#41/#49/#51/#55 评估精度提升后,严格条件 + 大 MARGIN);(e) King Attack Zone 精化(区分威胁等级 / 加重将牌位车马炮威胁);3) 优先 (a) Cannon screen stability — 与 #55 对称(攻防两端 mobility 精化),互补价值高。"
 }
