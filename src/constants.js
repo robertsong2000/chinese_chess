@@ -53,11 +53,20 @@ const RECENT_ROUTE_PENALTY = 420;
 const CYCLE_FILTER_PENALTY = DIRECT_REVERSAL_PENALTY;
 const KILLER_BONUS_MAIN = 8000;
 const KILLER_BONUS_SECOND = 7000;
-const MAX_KILLER_PLY = 32;
+// MAX_KILLER_PLY 设为 64(#43 调优):hard 模式 SEARCH_DEPTH.hard=5,叠加 check extension(+1/2 ply)、
+// null move reduction(depth-3 子搜索)、IID(depth-2 pre-search)、PVS re-search 后,实际 ply 可达 10-15。
+// 之前 32 已够,但 64 提供保险:防止未来深度优化后 ply 超过 32 时所有 cutoff 走法堆积在同一 slot
+// (Math.min(ply, length-1) 边界处理导致深层 killer 信号互相覆盖)。
+const MAX_KILLER_PLY = 64;
 const KILLER_SLOTS = 2;
 const HISTORY_MAX_BONUS = 6000;
 const HISTORY_BOARD_SQUARES = 90;
 const HISTORY_SATURATION_CAP = HISTORY_MAX_BONUS * 4;
+// History bonus 公式偏移(#43 调优):
+// 原 `depth * depth` 在 depth=1 时只加 1,几乎与零深度 noise 不可区分;
+// 用 `(depth + OFFSET)^2` 让 depth=1 cutoff 累积 4,depth=5 累积 36,低深度 cutoff 也有可识别信号。
+// 直接服务 move ordering 质量 → LMR/PVS 准确性 → 搜索深度。
+const HISTORY_BONUS_DEPTH_OFFSET = 1;
 const LMR_MIN_DEPTH = 3;
 const LMR_FULL_MOVE_COUNT = 3;
 const LMR_REDUCTION = 1;

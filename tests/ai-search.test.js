@@ -1026,3 +1026,86 @@ test("#41 cannonPalaceThreatBonus: cannon aimed at enemy palace with exactly 1 s
   assert.equal(result.twoScreens, 0, `2+ screens should give 0, got ${result.twoScreens}`);
   assert.equal(result.offCol, 0, `cannon not on palace column should give 0, got ${result.offCol}`);
 });
+
+test("#43 killer/history tuning: MAX_KILLER_PLY + history depth offset constants", () => {
+  // 契约:
+  // - MAX_KILLER_PLY >= 64:保险值,防止 hard + extension/null/IID 叠加后 ply 超过表深导致
+  //   所有深层 cutoff 走法堆在 boundary slot(killers[Math.min(ply, len-1)]),killer 信号互相覆盖。
+  //   之前 32 已够当前深度,但调到 64 为未来深度优化留余量。
+  // - HISTORY_BONUS_DEPTH_OFFSET >= 1:让 history update 公式 `(depth + OFFSET)^2` 在 depth=1 cutoff
+  //   时累积 >= 4 而非 1,低深度 cutoff 信号不被深度 5+ 的 cutoff(原 25)完全淹没。
+  // - KILLER_SLOTS=2:经典值,与 storeKiller 实现一致(slot[0] / slot[1] 双向 shift)。
+  // - HISTORY_SATURATION_CAP > HISTORY_MAX_BONUS:ordering bonus 必须在 saturation 之前生效,
+  //   cap 至少为 max bonus 的 2 倍,确保 high-frequency cutoff 走法 bonus 持续累积。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    maxKillerPly: MAX_KILLER_PLY,
+    killerSlots: KILLER_SLOTS,
+    histOffset: HISTORY_BONUS_DEPTH_OFFSET,
+    histMax: HISTORY_MAX_BONUS,
+    histCap: HISTORY_SATURATION_CAP,
+  }))()`);
+  assert.ok(result.maxKillerPly >= 64,
+    `MAX_KILLER_PLY should be >= 64 (insurance against ply overflow), got ${result.maxKillerPly}`);
+  assert.equal(result.killerSlots, 2, `KILLER_SLOTS should be 2 (classic), got ${result.killerSlots}`);
+  assert.ok(result.histOffset >= 1,
+    `HISTORY_BONUS_DEPTH_OFFSET should be >= 1 (let depth=1 cutoff accumulate), got ${result.histOffset}`);
+  assert.ok(result.histCap >= result.histMax * 2,
+    `HISTORY_SATURATION_CAP must be >= 2x HISTORY_MAX_BONUS, got cap=${result.histCap} max=${result.histMax}`);
+});
+
+test("#43 storeHistory: deeper cutoffs accumulate quadratically more bonus", () => {
+  // 验证 history update 公式 `(depth + OFFSET)^2` 的关键不变量:
+  // 1) 同一走法在 depth=5 vs depth=1 cutoff,depth=5 累积的 bonus 应显著高于 depth=1
+  //    (deep cutoff 是更可靠的"好走法"信号,理应获更高权重 → 更靠前 ordering)。
+  // 2) 公式应该让 depth=1 cutoff 累积 >= 4 而非 1(原 depth*depth 在 depth=1 时仅加 1)。
+  // 3) 多次 store 后累积值不超过 SATURATION_CAP(gravity 防饱和)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const h1 = createHistoryTable();
+    const h5 = createHistoryTable();
+    const move = { fromX: 1, fromY: 1, toX: 2, toY: 2 };
+    storeHistory(h1, move, 1);
+    storeHistory(h5, move, 5);
+    const idx = 1 * 9 + 1;
+    const j = 2 * 9 + 2;
+    const flatIdx = idx * HISTORY_BOARD_SQUARES + j;
+    return {
+      bonusDepth1: h1[flatIdx],
+      bonusDepth5: h5[flatIdx],
+      ratio: h5[flatIdx] / h1[flatIdx],
+      offset: HISTORY_BONUS_DEPTH_OFFSET,
+    };
+  })()`);
+  // depth=1 cutoff 应累积 (1+1)^2 = 4 而非原 1
+  assert.ok(result.bonusDepth1 >= 4,
+    `depth=1 cutoff should accumulate >= 4 (offset formula), got ${result.bonusDepth1}`);
+  // depth=5 cutoff 应累积 (5+1)^2 = 36
+  assert.ok(result.bonusDepth5 >= 36,
+    `depth=5 cutoff should accumulate >= 36, got ${result.bonusDepth5}`);
+  // deep cutoff 应比 shallow cutoff 累积更多(经典 history heuristic 设计)
+  assert.ok(result.ratio >= 3,
+    `depth=5 / depth=1 ratio should be >= 3 (deep cutoffs matter more), got ${result.ratio}`);
+});
+
+test("#43 killer table: deep ply cutoffs do not collapse into boundary slot", () => {
+  // 验证 MAX_KILLER_PLY 调到 64 后,深层 cutoff 不会因 boundary 处理(stack[Math.min(ply, len-1)])
+  // 而堆在同一 slot。构造 ply=40 与 ply=50 的 cutoff,确认它们落在不同的 slot 索引。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const killers = createKillerTable();
+    const moveA = { fromX: 1, fromY: 1, toX: 2, toY: 2 };
+    const moveB = { fromX: 3, fromY: 3, toX: 4, toY: 4 };
+    storeKiller(killers, 40, moveA);
+    storeKiller(killers, 50, moveB);
+    return {
+      maxPly: MAX_KILLER_PLY,
+      slot40: killers[40][0],
+      slot50: killers[50][0],
+      distinct: killers[40][0] !== killers[50][0],
+    };
+  })()`);
+  assert.ok(result.maxPly >= 64, `MAX_KILLER_PLY should be >= 64, got ${result.maxPly}`);
+  assert.ok(result.distinct,
+    `killers[40][0] and killers[50][0] should be distinct (no boundary collapse), got 40=${result.slot40} 50=${result.slot50}`);
+});

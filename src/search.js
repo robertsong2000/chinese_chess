@@ -626,7 +626,10 @@ function storeHistory(history, move, depth) {
   if (!history) return;
   const from = squareIndex(move.fromX, move.fromY);
   const to = squareIndex(move.toX, move.toY);
-  const bonus = depth > 0 ? depth * depth : 1;
+  // #43 调优:`(depth + OFFSET)^2` 取代 `depth * depth`,让低深度 cutoff 也累积有意义 bonus。
+  const bonus = depth > 0
+    ? (depth + HISTORY_BONUS_DEPTH_OFFSET) * (depth + HISTORY_BONUS_DEPTH_OFFSET)
+    : 1;
   const idx = from * HISTORY_BOARD_SQUARES + to;
   let next = history[idx] + bonus;
   if (next > HISTORY_SATURATION_CAP) next = HISTORY_SATURATION_CAP;
