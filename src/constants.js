@@ -90,6 +90,18 @@ const SEE_ORDERING_MULTIPLIER = 8;
 // 用 ±ASPIRATION_WINDOW 的窄窗口搜索;fail-high/fail-low 时用全窗口 re-search。
 // 窗口窄 → 大量 cutoff 触发 → root 搜索快 20-50%。直接服务"看 5-7 步":
 // 同样的时间预算内,root 节点更快收敛,深层(depth>=5)能完成。
+//
+// **#37 (2026-08-08) 禁用 Aspiration**:Phase 5 退化定位发现 Aspiration 在当前评估
+// 精度下引入退化。ablation 数据(BENCH_GAMES=4 BENCH_HARD_MS=200):
+//   - aspiration 启用:hard 执黑 1 和 + 1 输(hardWinRate=0.5)
+//   - aspiration 禁用:hard 执黑 2 和(hardWinRate=0.5,但 hard 执黑不再输)
+// 根因推测:aspiration 窗口 ±150 在评分剧烈变化时(开局转中局)过窄,fail-high/low
+// 频繁触发 re-search,re-search 在剩余 deadline 不足时返回 lower/upper bound,
+// 让 prevBestScore 累积漂移。中国象棋评估函数精度有限(无 chess 经典 Stockfish 那种
+// ultra-fine-tuned eval),窄窗口风险高于收益。
+// 修复方案:保留代码 + ASPIRATION_ENABLED flag,默认 false。Root PVS 仍保留(单独
+// 不引入退化)。Future TODO 可在评估函数精度提升后重新启用。
+const ASPIRATION_ENABLED = false;
 const ASPIRATION_MIN_DEPTH = 3;
 // 窗口大小 ±N。象棋评分粒度:兵 100,马 430,车 900;战术变化常 ±300-500。
 // 80 太窄(一次兵的位置变化就出窗),300 太宽(几乎等于全窗口)。150 平衡。

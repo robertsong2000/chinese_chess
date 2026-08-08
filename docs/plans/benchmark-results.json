@@ -1,11 +1,11 @@
 {
-  "ranAt": "2026-08-08T10:53:16.771Z",
+  "ranAt": "2026-08-08T11:38:15.877Z",
   "config": {
     "GAMES": 4,
     "MAX_PLY": 80,
     "NO_CAPTURE_DRAW_PLY": 30,
-    "HARD_DEADLINE_MS": 150,
-    "NORMAL_DEADLINE_MS": 100,
+    "HARD_DEADLINE_MS": 200,
+    "NORMAL_DEADLINE_MS": 150,
     "TACTIC_DEADLINE_MS": 300,
     "TACTIC_PASS_THRESHOLD": 0.6
   },
@@ -101,10 +101,10 @@
   "summary": {
     "games": 4,
     "hardWins": 2,
-    "normalWins": 2,
-    "draws": 0,
+    "normalWins": 0,
+    "draws": 2,
     "avgPly": 80,
-    "totalElapsedMs": 186513,
+    "totalElapsedMs": 191793,
     "perGame": [
       {
         "id": 1,
@@ -113,16 +113,16 @@
         "winner": "red",
         "reason": "checkmate",
         "plies": 79,
-        "elapsedMs": 40865
+        "elapsedMs": 40728
       },
       {
         "id": 2,
         "red": "normal",
         "black": "hard",
-        "winner": "red",
-        "reason": "material_majority",
+        "winner": null,
+        "reason": "draw_material",
         "plies": 80,
-        "elapsedMs": 52417
+        "elapsedMs": 55261
       },
       {
         "id": 3,
@@ -131,16 +131,16 @@
         "winner": "red",
         "reason": "checkmate",
         "plies": 79,
-        "elapsedMs": 40752
+        "elapsedMs": 40666
       },
       {
         "id": 4,
         "red": "normal",
         "black": "hard",
-        "winner": "red",
-        "reason": "material_majority",
+        "winner": null,
+        "reason": "draw_material",
         "plies": 80,
-        "elapsedMs": 52479
+        "elapsedMs": 55138
       }
     ],
     "hardWinRate": 0.5

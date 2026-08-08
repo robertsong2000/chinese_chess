@@ -339,9 +339,10 @@ function runAISearch(s) {
   for (let depth = 1; depth <= maxDepth; depth += 1) {
     // Aspiration window:depth >= MIN 时,以前一深度 bestScore 为中心窄窗口搜索;
     // fail-high/fail-low 时用全窗口 re-search。窗口窄 → cutoff 触发率更高 → root 更快收敛。
+    // #37 (2026-08-08):ASPIRATION_ENABLED 默认 false — 当前评估精度下窄窗口风险高于收益。
     let alpha;
     let beta;
-    if (depth >= ASPIRATION_MIN_DEPTH && prevBestScore !== null) {
+    if (ASPIRATION_ENABLED && depth >= ASPIRATION_MIN_DEPTH && prevBestScore !== null) {
       alpha = prevBestScore - ASPIRATION_WINDOW;
       beta = prevBestScore + ASPIRATION_WINDOW;
     } else {

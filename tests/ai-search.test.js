@@ -315,11 +315,15 @@ test("aspiration window constants are configured for tactical depth burst", () =
   // 契约:ASPIRATION_MIN_DEPTH = 3(经典做法:1-2 深度窗口太窄收益小);
   // ASPIRATION_WINDOW = 150(象棋兵 100、马 430,150 介于"兵变化"与"半个马"之间,
   // 既覆盖常见评估微调,又不会因窗口太宽失去 cutoff 价值)。
+  // #37 (2026-08-08):ASPIRATION_ENABLED = false — Phase 5 退化定位发现 aspiration
+  // 在当前评估精度下让 hard 执黑从和棋变输,故默认禁用。Root PVS 仍启用。
   const engine = createEngine();
   const result = engine.json(`(() => ({
+    enabled: ASPIRATION_ENABLED,
     minDepth: ASPIRATION_MIN_DEPTH,
     window: ASPIRATION_WINDOW,
   }))()`);
+  assert.equal(result.enabled, false, "ASPIRATION_ENABLED should be false (#37 regression fix)");
   assert.equal(result.minDepth, 3, "ASPIRATION_MIN_DEPTH should be 3");
   assert.equal(result.window, 150, "ASPIRATION_WINDOW should be 150");
 });
