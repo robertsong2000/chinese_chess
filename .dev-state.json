@@ -774,14 +774,17 @@
       "phase": 6,
       "category": "棋力-验证",
       "title": "扩展 tactics 测试集(>= 10 题)+ 长 benchmark(>= 20 局)",
-      "description": "当前 5 题战术 + 4 局 self-play 置信度低。扩到 10+ 题涵盖更多战术类型(double check / discovered / X-ray),长 benchmark 提置信度。",
+      "description": "[本次完成 2026-08-08] 扩展 tactics 测试集从 5 → 10 题,新增 5 个 puzzle (T6-T10) 覆盖更多战术类型:T6 炮通过架子吃马(cannon capture via screen)/ T7 过河兵吃马(soldier trade-up)/ T8 防守反吃将军子(defensive counter-capture)/ T9 红马 fork 黑车+黑炮(RED 方 fork)/ T10 双炮重叠后炮吃车(nested cannon capture)。T10 设计修正:将错开列(红将 (5,9) 黑将 (3,0))避免前炮 (4,7) 通过车作架子直接吃将的 1-ply 杀漏洞。BENCH_LONG=1 env 支持长 benchmark(默认 20 局,与默认 8 局 smoke 模式区分)。契约测试从 #35(5 题)升级为 #42(>=10 题 + T6-T10 多样性:至少覆盖 4 种 pieceType)。10/10 战术 pass(100%),44/44 测试通过(原 44,契约测试改名 #35 → #42 数量未变)。",
       "files": [
-        "tests/ai-benchmark.js"
+        "tests/ai-benchmark.js",
+        "tests/ai-search.test.js"
       ],
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 25,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-08T21:46:00+08:00",
+      "commit_sha": "77fb137"
     },
     {
       "id": 43,
@@ -1123,6 +1126,14 @@
       "summary": "#41 评估函数车马炮 mobility 精化:chariotOpenFile(25)/chariotSemiOpenFile(12)/horseCenter(10)/cannonPalaceThreat(18)。3 个精化函数(mobilityRefinementBonus 调度)+ evaluateBoard 接入。初始局面 0 加分(对称不变量保持)。+4 测试(对称 + 车 + 马 + 炮)。",
       "commit_sha": "7a2f4d89",
       "full_commit_sha": "7a2f4d898fbade149c39c6a8ae3350016c92a0f1"
+    },
+    {
+      "timestamp": "2026-08-08T21:46:00+08:00",
+      "todo_id": 42,
+      "action": "completed",
+      "summary": "#42 扩展 tactics 5→10:T6 炮吃马(via 屏)/ T7 兵吃马/ T8 防守反吃车/ T9 红马 fork 双高价值/ T10 双炮重叠吃车(T10 将错开列避免前炮 1-ply 杀将漏洞)。BENCH_LONG=1 默认 20 局 self-play。契约测试升级:>=10 题 + T6-T10 覆盖 >=4 种 pieceType。10/10 战术 pass(100%),44/44 测试通过。",
+      "commit_sha": "77fb137",
+      "full_commit_sha": "77fb137650e368f3a1ca75eaa49e59638fee2659"
     }
   ],
   "rules": [
@@ -1134,5 +1145,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 6 #41 完成:车马炮 mobility 精化 — 车开放线(+25 全开/+12 半开)、马中心(中央列3-5+过河 +10)、炮对宫(同列/行射入敌宫+1架 +18)。evaluateBoard 接入 mobilityRefinementBonus(piece, board)。初始局面 0 加分(对称不变量),3 个 endgame/midgame 测试无回归。+4 测试(初始对称 + 车开放线 3 场景 + 马中心 4 场景 + 炮对宫 4 场景)。Phase 6 进度:4/6 done(#38 delta pruning,#39 LMP,#40 TT replace,#41 mobility 精化),剩 2 项:#42 扩展 tactics 测试集(>=10 题)+ 长 benchmark(>=20 局),#43 Killer/History 表深度调优 + IID 验证。建议下一个 TODO:#42(验证近期优化真实效果,当前 4 局 deterministic 置信度低)或 #43(继续深度优化)。棋力 ~1900-2000(二级棋士),距一级棋士 2200 仍差 200-300 Elo。"
+  "next_run_hint": "Phase 6 #42 完成:tactics 5→10 + BENCH_LONG=1 (20 局)。新 T6-T10 覆盖炮(via 屏)/ 兵 / 防守反吃 / 红方 fork / 双炮重叠。10/10 pass(100%)。44/44 测试通过。Phase 6 进度:5/6 done(#38-42),剩 1 项:#43 Killer/History 表深度调优 + IID 验证(KILLER_TABLE_PLY / history update formula / IID 触发)。建议下一个 TODO:#43(Phase 6 收尾),或长 benchmark(BENCH_LONG=1)验证近期优化的 self-play 真实效果。棋力 ~1900-2000(二级棋士)。"
 }
