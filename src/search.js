@@ -1225,6 +1225,9 @@ function evaluateBoard(board, aiSide) {
   // #49 King Attack Zone:敌宫及邻接缓冲行聚集车马炮 → 进攻方加分
   score += kingAttackBonus(board, aiSide);
   score -= kingAttackBonus(board, opposite(aiSide));
+  // #55 Horse Leg Penalty:马腿被堵的马减分(降低被困马估值)
+  score += horseLegPenalty(board, aiSide);
+  score -= horseLegPenalty(board, opposite(aiSide));
   // #51 残局双兵过河协同(必胜结构):仅 endgame 阶段加分
   if (endgame) {
     score += endgameSoldierCoordinationBonus(board, aiSide);
@@ -1614,6 +1617,31 @@ function kingAttackBonus(board, side) {
     bonus += KING_ATTACK.multiAttackerBonus * (attackersInZone - 1);
   }
   return bonus;
+}
+
+// #55 Horse Leg Penalty:统计 side 方所有马的腿位被堵情况,返回该方总扣分(负数)。
+// 马的 4 个腿位:(0,±1) 与 (±1,0)。每个腿位被任意子(友方/敌方)堵住时,
+// 该马的 2 个走法方向失效(灵活性下降)。直接服务"完全不送子"(防止把被困马
+// 高估成自由马)+ "中局战术组合能力"(让 AI 主动派子去蹩对方马腿)。
+// 返回 side 方的总扣分(负数);evaluateBoard 双向相减。
+function horseLegPenalty(board, side) {
+  if (!HORSE_LEG_PENALTY) return 0;
+  let penalty = 0;
+  for (const piece of livePieces(board)) {
+    if (piece.side !== side || piece.type !== TYPES.HORSE) continue;
+    const legs = [
+      [0, 1],
+      [0, -1],
+      [1, 0],
+      [-1, 0],
+    ];
+    for (const [lx, ly] of legs) {
+      if (pieceAt(board, piece.x + lx, piece.y + ly)) {
+        penalty += HORSE_LEG_PENALTY.perLeg;
+      }
+    }
+  }
+  return -penalty;
 }
 
 // 王的安全评估:负数表示该方王处于风险,正数表示防守稳固。

@@ -1828,3 +1828,67 @@ test("#54 cross-turn TT reuse: chooseAIMove populates a shared TT that persists 
     `both chooseAIMove calls must return legal moves (move1Valid=${result.move1Valid}, move2Valid=${result.move2Valid})`);
 });
 
+test("#55 horseLegPenalty constants are configured for trapped-horse detection", () => {
+  // 契约:HORSE_LEG_PENALTY.perLeg 是保守值(8),最大扣分 -32 远低于丢马代价。
+  // 直接服务"完全不送子":让 AI 知道被困马价值低于自由马,主动换形或解围。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    exists: typeof HORSE_LEG_PENALTY === 'object' && HORSE_LEG_PENALTY !== null,
+    perLeg: HORSE_LEG_PENALTY.perLeg,
+    perLegType: typeof HORSE_LEG_PENALTY.perLeg,
+  }))()`);
+  assert.ok(result.exists, 'HORSE_LEG_PENALTY constant must be defined');
+  assert.equal(result.perLegType, 'number', `perLeg must be a number, got ${result.perLegType}`);
+  assert.equal(result.perLeg, 8, `perLeg should be 8 (conservative; max -32 << horse value 430), got ${result.perLeg}`);
+});
+
+test("#55 horseLegPenalty: trapped horse (legs blocked) gets penalty, free horse gets 0", () => {
+  // 马的 4 个腿位:(0,1) (0,-1) (1,0) (-1,0)。每个被堵 -perLeg。
+  // 不区分友方/敌方堵(任意子堵都降低马灵活性)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const base = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+    ];
+    // 1) 自由马:红马 (4,4),腿位 (4,3)/(4,5)/(3,4)/(5,4) 无任何子
+    const free = [...base,
+      { id: 'rh', side: SIDES.RED, type: TYPES.HORSE, x: 4, y: 4, alive: true }];
+    // 2) 1 条腿堵(友方):红兵在 (4,5) → 腿位 (0,1) 被堵
+    const oneLeg = [...base,
+      { id: 'rh', side: SIDES.RED, type: TYPES.HORSE, x: 4, y: 4, alive: true },
+      { id: 'rs', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 5, alive: true }];
+    // 3) 4 条腿全堵(友方):4 个红兵在 4 个腿位
+    const allLegs = [...base,
+      { id: 'rh', side: SIDES.RED, type: TYPES.HORSE, x: 4, y: 4, alive: true },
+      { id: 's1', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 5, alive: true },
+      { id: 's2', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 3, alive: true },
+      { id: 's3', side: SIDES.RED, type: TYPES.SOLDIER, x: 5, y: 4, alive: true },
+      { id: 's4', side: SIDES.RED, type: TYPES.SOLDIER, x: 3, y: 4, alive: true }];
+    // 4) 敌方堵腿:黑车在 (4,5) → 同样扣分(灵活性下降,无论堵者归属)
+    const enemyLeg = [...base,
+      { id: 'rh', side: SIDES.RED, type: TYPES.HORSE, x: 4, y: 4, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 4, y: 5, alive: true }];
+
+    return {
+      freePenalty: horseLegPenalty(free, SIDES.RED),
+      oneLegPenalty: horseLegPenalty(oneLeg, SIDES.RED),
+      allLegsPenalty: horseLegPenalty(allLegs, SIDES.RED),
+      enemyLegPenalty: horseLegPenalty(enemyLeg, SIDES.RED),
+      blackFreePenalty: horseLegPenalty(free, SIDES.BLACK),
+      perLeg: HORSE_LEG_PENALTY.perLeg,
+    };
+  })()`);
+
+  assert.equal(result.freePenalty, 0,
+    `free horse (no blocked legs) should give 0, got ${result.freePenalty}`);
+  assert.equal(result.oneLegPenalty, -result.perLeg,
+    `1 blocked leg (friendly) should give -${result.perLeg}, got ${result.oneLegPenalty}`);
+  assert.equal(result.allLegsPenalty, -4 * result.perLeg,
+    `4 blocked legs should give -${4 * result.perLeg}, got ${result.allLegsPenalty}`);
+  assert.equal(result.enemyLegPenalty, -result.perLeg,
+    `enemy-blocked leg should also give -${result.perLeg} (mobility loss is side-agnostic), got ${result.enemyLegPenalty}`);
+  assert.equal(result.blackFreePenalty, 0,
+    `black side with no horses should give 0, got ${result.blackFreePenalty}`);
+});
+
