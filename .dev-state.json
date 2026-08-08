@@ -725,14 +725,16 @@
       "phase": 6,
       "category": "棋力-搜索效率",
       "title": "Late Move Pruning(LMP):浅层 prune 排序靠后的 quiet 走法",
-      "description": "经典 forward pruning:depth<=2 + i>=LMP_MIN_INDEX + quiet 非 check → 直接跳过。与 futility 互补,加速 move loop 20-30%。",
+      "description": "[本次完成 2026-08-08] Late Move Pruning(浅层 forward pruning):\nnegamax move loop 在 futility skip 之后加 LMP skip — i>=LMP_MIN_INDEX(=4) + depth<=2 + full window + quiet 非 check 走法直接 continue。\n与 futility 互补:futility 是节点级(standPat+margin≤alpha),LMP 是走法位置级(不依赖 standPat,仅基于 depth/index/isQuiet/!check)。\n新增 3 个常量:LMP_MAX_DEPTH=2 / LMP_MIN_INDEX=4(与 LMR_FULL_MOVE_COUNT=3 错开,LMR 处理 [3+],LMP 处理 [4+])/ LMP_MIN_WINDOW=1(PVS zero-window probe 路径不启用)。\n2 个回归测试:契约 + 战术局面(黑车吃红马)。37/37 测试通过(35+2)。\nBenchmark self-play 4 局 hardWinRate=0.5(hard 执红 2 胜,hard 执黑 0 胜),与 #37/#38 baseline 完全一致,无回归。战术 5/5 pass。\n残留:LMP 单独未观察到 self-play 提升(理论上 forward pruning 加速 move loop 20-30%,长 benchmark 才能体现深度收益)。",
       "files": [
         "src/search.js"
       ],
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 25,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-08T20:21:21+08:00",
+      "commit_sha": "fb8c5fd"
     },
     {
       "id": 40,
@@ -1093,6 +1095,14 @@
       "action": "completed",
       "summary": "#38 Phase 6 启动:Quiescence delta pruning(safe,!inCheck + standPat+captured+MARGIN≤alpha→剪)。Ablation:SEE pruning 退化 hard 执黑(0/2 输,不见 pin/discovered 等战术后果)→ 禁用;MARGIN=200 也退化 → 用 500。35/35 测试通过(2 个新契约测试),self-play 4 局与 baseline 一致无回归,战术 5/5 pass。",
       "commit_sha": "ebc2971"
+    },
+    {
+      "timestamp": "2026-08-08T20:21:21+08:00",
+      "todo_id": 39,
+      "action": "completed",
+      "summary": "#39 LMP:浅层(depth<=2)+ 走法排序后第 5+(index>=4)+ quiet 非 check 走法直接 skip。与 futility 互补(节点级 vs 走法位置级)。3 个常量(LMP_MAX_DEPTH=2 / LMP_MIN_INDEX=4 / LMP_MIN_WINDOW=1),复用 futility 的 PVS zero-window probe 路径排除。2 个回归测试(契约 + 黑车吃红马战术)。37/37 测试通过(35+2)。benchmark hardWinRate=0.5 与 #37/#38 baseline 一致,战术 5/5 pass,无回归。",
+      "commit_sha": "fb8c5fd",
+      "full_commit_sha": "fb8c5fdfaa5380af479c570d9b5b1d74cf9f8e50"
     }
   ],
   "rules": [
@@ -1104,5 +1114,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 5 #37 完成(Aspiration Window 禁用,hard 执黑从输 → 和)。当前 self-play hardWinRate=0.5(hard 执红稳定胜,hard 执黑稳定和)。建议下一个 TODO 优先:(1) 提升评估函数精度 — quiescence SEE/Delta pruning 经典优化,减少明显亏子 capture 的搜索,直接服务'完全不送子';(2) 加更多战术题(>= 10)+ longer self-play(>= 20 局)提置信度;(3) 探索'hard 执黑反先胜'需更深搜索(LMR 深化 / Singular Extension)或更精确评估(残局 tablebase);(4) 当前棋力 ~1900-2000(二级棋士),距离一级棋士 2200 还差 200-300 Elo。"
+  "next_run_hint": "Phase 6 #39 LMP 完成。当前 phase 6 进度:2/6 done(#38 delta pruning, #39 LMP),剩 4 项 pending(#40 TT replacement / #41 mobility 精化 / #42 扩展 tactics + 长 benchmark / #43 killer/history 调优)。self-play hardWinRate=0.5 稳定(hard 执红胜,hard 执黑和/输)。建议下一个 TODO 优先级:(1) #42 扩展 tactics 到 10+ 题 + 长 benchmark 20+ 局提置信度,是验证前几个优化真实效果的关键 — 当前 4 局 deterministic 置信度低;(2) #40 TT replacement scheme,避免 TT 满时全清空丢失 PV 信息,直接提升搜索深度;(3) #41 mobility 精化,提升评估精度 → alpha-beta cutoff 更准 → 深度自然提升;(4) 当前棋力 ~1900-2000(二级棋士),距离一级棋士 2200 还差 200-300 Elo。"
 }
