@@ -1,57 +1,184 @@
 {
-  "ranAt": "2026-08-08T04:23:18.355Z",
+  "ranAt": "2026-08-08T10:26:46.879Z",
   "config": {
-    "GAMES": 4,
+    "GAMES": 8,
     "MAX_PLY": 80,
     "NO_CAPTURE_DRAW_PLY": 30,
-    "HARD_DEADLINE_MS": 200,
-    "NORMAL_DEADLINE_MS": 150
+    "HARD_DEADLINE_MS": 300,
+    "NORMAL_DEADLINE_MS": 200,
+    "TACTIC_DEADLINE_MS": 300,
+    "TACTIC_PASS_THRESHOLD": 0.6
+  },
+  "tactics": {
+    "total": 5,
+    "passed": 5,
+    "rate": 1,
+    "passThreshold": 0.6,
+    "passThresholdMet": true,
+    "results": [
+      {
+        "id": "T1",
+        "name": "免费吃车(1-ply capture)",
+        "passed": true,
+        "move": {
+          "from": [
+            6,
+            3
+          ],
+          "to": [
+            5,
+            5
+          ],
+          "pieceType": "horse"
+        }
+      },
+      {
+        "id": "T2",
+        "name": "马走日形成 fork(1-ply tactic)",
+        "passed": true,
+        "move": {
+          "from": [
+            4,
+            2
+          ],
+          "to": [
+            3,
+            4
+          ],
+          "pieceType": "horse"
+        }
+      },
+      {
+        "id": "T3",
+        "name": "防守吃将军子(1-ply defensive)",
+        "passed": true,
+        "move": {
+          "from": [
+            4,
+            9
+          ],
+          "to": [
+            4,
+            0
+          ],
+          "pieceType": "general"
+        }
+      },
+      {
+        "id": "T4",
+        "name": "优势兑换:兵换马(1-ply trade-up)",
+        "passed": true,
+        "move": {
+          "from": [
+            4,
+            6
+          ],
+          "to": [
+            4,
+            5
+          ],
+          "pieceType": "soldier"
+        }
+      },
+      {
+        "id": "T5",
+        "name": "残局车将军(车 vs 孤将杀型)",
+        "passed": true,
+        "move": {
+          "from": [
+            4,
+            9
+          ],
+          "to": [
+            4,
+            0
+          ],
+          "pieceType": "general"
+        }
+      }
+    ]
   },
   "summary": {
-    "games": 4,
-    "hardWins": 2,
-    "normalWins": 2,
-    "draws": 0,
-    "avgPly": 74,
-    "totalElapsedMs": 189490,
+    "games": 8,
+    "hardWins": 0,
+    "normalWins": 4,
+    "draws": 4,
+    "avgPly": 78,
+    "totalElapsedMs": 373253,
     "perGame": [
       {
         "id": 1,
         "red": "hard",
         "black": "normal",
-        "winner": "red",
-        "reason": "material_majority",
-        "plies": 80,
-        "elapsedMs": 53433
+        "winner": null,
+        "reason": "stalemate",
+        "plies": 75,
+        "elapsedMs": 38440
       },
       {
         "id": 2,
         "red": "normal",
         "black": "hard",
         "winner": "red",
-        "reason": "checkmate",
-        "plies": 67,
-        "elapsedMs": 41149
+        "reason": "material_majority",
+        "plies": 80,
+        "elapsedMs": 54886
       },
       {
         "id": 3,
         "red": "hard",
         "black": "normal",
-        "winner": "red",
-        "reason": "material_majority",
-        "plies": 80,
-        "elapsedMs": 53320
+        "winner": null,
+        "reason": "stalemate",
+        "plies": 75,
+        "elapsedMs": 38440
       },
       {
         "id": 4,
         "red": "normal",
         "black": "hard",
         "winner": "red",
-        "reason": "checkmate",
-        "plies": 67,
-        "elapsedMs": 41588
+        "reason": "material_majority",
+        "plies": 80,
+        "elapsedMs": 54863
+      },
+      {
+        "id": 5,
+        "red": "hard",
+        "black": "normal",
+        "winner": null,
+        "reason": "stalemate",
+        "plies": 75,
+        "elapsedMs": 38413
+      },
+      {
+        "id": 6,
+        "red": "normal",
+        "black": "hard",
+        "winner": "red",
+        "reason": "material_majority",
+        "plies": 80,
+        "elapsedMs": 54881
+      },
+      {
+        "id": 7,
+        "red": "hard",
+        "black": "normal",
+        "winner": null,
+        "reason": "stalemate",
+        "plies": 75,
+        "elapsedMs": 38470
+      },
+      {
+        "id": 8,
+        "red": "normal",
+        "black": "hard",
+        "winner": "red",
+        "reason": "material_majority",
+        "plies": 80,
+        "elapsedMs": 54860
       }
     ],
-    "hardWinRate": 0.5
+    "hardWinRate": 0
   }
 }

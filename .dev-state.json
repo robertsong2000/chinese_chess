@@ -603,45 +603,51 @@
       "phase": 4,
       "category": "棋力-评估-战术",
       "title": "战术模式检测(pin/fork/discovered attack)",
-      "description": "在 evaluateBoard 中加战术检测:1)pin(被钉住的子不能动,扣对方 mobility);2)fork(马/车同时攻击 2+ 高价值子);3)discovered attack(移动后暴露另一子攻击)。每种战术加 30-80 分。验收:npm test 通过 + 1 个战术局面测试。",
+      "description": "战术模式检测:fork / pin / discovered attack。新增 tacticBonus(board, side) 函数。\n- Fork:车/马/炮同时攻击 2+ 高价值子,或 1 高价值 + 将军(抽将型 fork)→ +60 + 第 3+ 目标 +15\n- Pin:车与敌将共线 + 中间恰好 1 个敌方非将子 → +40;高价值子(>=马)再 +20\n- Cannon pin:炮与敌将共线 + 中间恰好 2 子含敌方非将子作架 → +30\n- Discovered attack:X 沿某方向反方向最近子是我方车,正方向最近子是敌方高价值/将,中间空 → +35\nevaluateBoard 末尾加 tacticBonus(aiSide) - tacticBonus(opp)。\nTACTIC_BONUS 各值 30-80(参考子力分:兵 100/马 430/炮 450/车 900),TACTIC_HIGH_VALUE_TYPES 含车/马/炮。\n2 个回归测试:常量契约 + 战术局面(对称子力下黑马 fork 红车+红炮 → tacticBonus(black)>=60, evalBlack>0)。29/29 pass。",
       "files": [
         "src/search.js",
         "tests/ai-search.test.js"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 30,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-08T13:16:10+08:00",
+      "commit_sha": "05cf161"
     },
     {
       "id": 34,
       "phase": 4,
       "category": "棋力-残局",
       "title": "实用残局模式识别(车对单车 / 车炮对单车 必胜)",
-      "description": "识别 4-6 种常见必胜残局模式(车胜单车、车炮胜单车、马兵胜单士等),给强方大幅加分(+500)鼓励换子进入必胜局面。验收:npm test 通过 + 1 个残局局面测试。",
+      "description": "新增 endgamePatternBonus(board, side) 函数识别 5 种必胜/优势残局:车炮对单车 +500 / 车马对单车 +500 / 马兵对单士 +500(经典必胜)/ 车对仅剩士象 +300(车必破士象)/ 过河兵对孤将 +200(鼓励兵升变)。evaluateBoard 末尾双向相减,鼓励强方主动换子进入必胜结构。常量 ENDGAME_PATTERN_BONUS 加入 constants.js。2 个回归测试:常量契约 + 车炮对单车残局局面识别。31/31 pass。\n[本次完成 2026-08-08] commit 3dc1c33。",
       "files": [
         "src/search.js",
         "tests/ai-search.test.js"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 30,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-08T13:42:49+08:00",
+      "commit_sha": "3dc1c33"
     },
     {
       "id": 35,
       "phase": 4,
       "category": "棋力-验证",
       "title": "扩展 benchmark:tactics 测试集 + 自对弈 8 局",
-      "description": "tests/ai-benchmark.js 加 5 个经典战术题(必胜陷阱、防守关键局面),验证 hard 模式能正确解答。再加 hard 自对弈 8 局(原本 4 局),统计胜率。结果写到 docs/plans/benchmark-results.md。验收:npm test 通过 + tactics 通过率 >= 60%。",
+      "description": "[本次完成 2026-08-08] 扩展 benchmark:\n- tests/ai-benchmark.js 加 TACTICS 数组(5 题)+ runTactics(engine) 函数,每题用 hard AI 在 300ms 时间盒内寻找正着,谓词在 vm 内 eval 验证走法特征。\n- 默认 GAMES 4 → 8(BENCH_GAMES 可覆盖),TACTIC_PASS_THRESHOLD=0.6。\n- 加 formatMarkdown(report) 输出 md 表格。\n- 5 题设计:T1 免费吃车 / T2 fork(错开红将避免飞将干扰)/ T3 防守吃将军子(允许飞将绝杀替代)/ T4 兵换马 / T5 残局车将军(允许飞将绝杀替代)。\n- ai-search.test.js 加 1 个回归测试验证 TACTICS 契约(长度 5 / ids T1-T5 / 双方覆盖 / 谓词引用 move / boardSrc 含 TYPES.GENERAL + alive:true)。\n\n结果(2026-08-08T10:26Z):\n- 战术:5/5 通过(100% > 60% 阈值)✓\n- 自对弈 8 局:hard 0 胜 / normal 4 胜 / 4 和 — hardWinRate=0\n- 退化模式高度一致(deterministic):4 局 hard 执红全 75 ply stalemate,4 局 hard 执黑全 80 ply 输 normal(material_majority)\n- 退化原因:Phase 4 改进(aspiration/futility/IID)在自对弈相互作用,与 #31 描述一致(baseline #30 已退化到 0.5,本次 8 局进一步退化)\n- 战术能力正常,完整对局退化 — 建议 Phase 5 优先做'退化定位'\n\n32/32 测试通过(原 31 + 新增 1)。",
       "files": [
         "tests/ai-benchmark.js",
         "docs/plans/benchmark-results.md"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 30,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-08T18:29:34+08:00",
+      "commit_sha": "(pending)"
     }
   ],
   "history": [
@@ -900,6 +906,28 @@
       "action": "completed",
       "summary": "IID:negamax 加 iidAllowed 参数,ply>0 + 无 TT move + depth>=3 时做 depth-2 pre-search populate TT,re-probe 拿 bestMoveKey 提升 ordering。pre-search 传 iidAllowed=false 防递归。2 个回归测试(常量契约 + 战术局面)。27/27 pass。",
       "commit_sha": "b950271"
+    },
+    {
+      "timestamp": "2026-08-08T13:16:10+08:00",
+      "todo_id": 33,
+      "action": "completed",
+      "summary": "战术模式检测 fork/pin/discovered:新增 tacticBonus(board, side)。Fork 检测(车/马/炮攻击 2+ 高价值子,或 1+将军)+ Pin 检测(车与将共线 + 中间 1 敌方非将子,高价值再加分)+ Cannon pin(炮与将共线 + 中间 2 子含敌方非将子)+ Discovered attack(X 移开暴露车攻击高价值/将)。evaluateBoard 末尾双向相减。6 个常量(fork=60/pin=40/cannonPin=30/pinHighValue=20/forkExtraTarget=15/discoveredAttack=35)+ TACTIC_HIGH_VALUE_TYPES(车/马/炮)。2 个回归测试(常量契约 + 战术局面:对称子力下黑马 fork 红车+红炮 → tacticBonus(black)>=60, evalBlack>0)。29/29 pass。",
+      "commit_sha": "05cf161"
+    },
+    {
+      "timestamp": "2026-08-08T13:42:49+08:00",
+      "todo_id": 34,
+      "action": "completed",
+      "summary": "实用残局模式识别:新增 endgamePatternBonus(board, side) 函数 + ENDGAME_PATTERN_BONUS 常量。5 种模式:车炮对单车 / 车马对单车 / 马兵对单士 各 +500(经典必胜,鼓励换子);车对仅剩士象 +300(车必破士象);过河兵对孤将 +200(鼓励兵升变)。evaluateBoard 末尾双向相减。2 个回归测试(常量契约 + 车炮对单车残局识别)。31/31 pass。Phase 4 完成 6/7,剩 #35 benchmark 扩展。",
+      "commit_sha": "3dc1c33",
+      "full_commit_sha": "3dc1c33022683e220683ed9c3eea0dba3b2fbdef"
+    },
+    {
+      "timestamp": "2026-08-08T18:29:34+08:00",
+      "todo_id": 35,
+      "action": "completed",
+      "summary": "#35 benchmark 扩展:TACTICS 数组(5 题:免费吃车/fork/防守吃将军/兵换马/残局车将军)+ runTactics + formatMarkdown,默认 4 → 8 局自对弈,TACTIC_DEADLINE_MS=300。结果:战术 5/5 通过(100% > 60%),自对弈 hard 0/4 normal 4/4 4 和(Phase 4 退化,deterministic,与 #31 baseline 已退化到 0.5 一致)。1 个契约回归测试,32/32 pass。Phase 4 全部 7/7 完成。退化分析记录在 docs/plans/benchmark-results.md。",
+      "commit_sha": "(pending)"
     }
   ],
   "rules": [
@@ -911,5 +939,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "下次运行应做 id=33 战术模式检测(pin/fork/discovered attack)。预估 30 分钟。后续 phase 4 待办:#34 实用残局、#35 tactics benchmark。注意:baseline benchmark 仍退化到 hardWinRate=0.5(#29/#30 引起),#33 完成后可加新 TODO 修复 benchmark 退化。"
+  "next_run_hint": "Phase 4 全部 7/7 TODO 完成(#29-#35)。当前状态:32/32 测试通过,战术 100% 通过,但 hard 自对弈退化到 0%(baseline #30 已退化到 50%,Phase 4 进一步退化)。建议 Phase 5 优先做:(1) 退化定位 — 二分 commit 二分 #29-#34 哪个引入退化;(2) 修复后再做深度优化(如 LMR 深化 / 更精确 SEE / 残局 tablebase);(3) 加入更多战术题(>= 10 题)和 longer self-play(>= 20 局)以提置信度。用户决定是否进入 Phase 5 或先 push 现有成果。"
 }

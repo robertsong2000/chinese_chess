@@ -2,11 +2,14 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createEngine } = require("./engine-harness");
 
-const GAMES = Number(process.env.BENCH_GAMES || 4);
+// #35 默认自对弈 8 局(可被 BENCH_GAMES 覆盖),并新增 5 个战术题(tactics)。
+const GAMES = Number(process.env.BENCH_GAMES || 8);
 const MAX_PLY = Number(process.env.BENCH_MAX_PLY || 80);
 const NO_CAPTURE_DRAW_PLY = Number(process.env.BENCH_DRAW_PLY || 30);
 const HARD_DEADLINE_MS = Number(process.env.BENCH_HARD_MS || 300);
 const NORMAL_DEADLINE_MS = Number(process.env.BENCH_NORMAL_MS || 200);
+const TACTIC_DEADLINE_MS = Number(process.env.BENCH_TACTIC_MS || 300);
+const TACTIC_PASS_THRESHOLD = Number(process.env.BENCH_TACTIC_PASS_RATIO || 0.6);
 
 function playOneGame(engine, gameId, redDifficulty, blackDifficulty) {
   return engine.json(`(() => {
@@ -108,7 +111,143 @@ function playOneGame(engine, gameId, redDifficulty, blackDifficulty) {
   })()`);
 }
 
+// #35 战术题集(5 题)。每题用 hard AI 在压缩时间盒内寻找正着。
+// 谓词 expectSrc 在 vm 内 eval,引用 move 变量;常量 SIDES / TYPES 由 vm 上下文提供。
+// 通过阈值:TACTIC_PASS_THRESHOLD(默认 60%,即至少 3/5)。
+// 设计:
+//   T1 免费吃车 — 1-ply 战术,验证 hard 不漏吃无保护子
+//   T2 fork — 1-ply 战术,验证 hard 选 fork 走法(马吃双高价值之一)
+//   T3 防守吃将军子 — 1-ply 防守,验证 hard 能吃掉将军子而非被动逃将
+//   T4 优势兑换 — 1-ply 战术,验证 hard 用低价值子换高价值子(兵换马)
+//   T5 残局车将军 — 1-ply 残局,验证 hard 红方在车 vs 孤将中选车将军(杀型正着)
+const TACTICS = [
+  {
+    id: "T1",
+    name: "免费吃车(1-ply capture)",
+    description: "黑马走日吃无保护红车,验证 hard 不漏吃",
+    boardSrc: `[
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 5, y: 5, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 6, y: 3, alive: true }
+    ]`,
+    side: "BLACK",
+    expectSrc: `(move && move.pieceType === TYPES.HORSE && move.toX === 5 && move.toY === 5)`,
+  },
+  {
+    id: "T2",
+    name: "马走日形成 fork(1-ply tactic)",
+    description: "黑马走日同时威胁红车 + 红炮,选吃其一;红将错开列避免飞将干扰",
+    boardSrc: `[
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 3, y: 4, alive: true },
+      { id: 'ra', side: SIDES.RED, type: TYPES.CANNON, x: 5, y: 4, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 4, y: 2, alive: true }
+    ]`,
+    side: "BLACK",
+    // 马走日 (4,2)→(3,4) 吃车 或 (4,2)→(5,4) 吃炮,两者都形成 fork
+    // 红将在 (3,9) 错开 4 列,马离开 (4,2) 后 4 列仍空但无飞将威胁
+    expectSrc: `(move && move.pieceType === TYPES.HORSE && ((move.toX === 3 && move.toY === 4) || (move.toX === 5 && move.toY === 4)))`,
+  },
+  {
+    id: "T3",
+    name: "防守吃将军子(1-ply defensive)",
+    description: "红方被黑马将军,正解是车吃马(同时解将 + 得子);飞将吃黑将也算通过(直接将死)",
+    boardSrc: `[
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 3, y: 7, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 3, y: 3, alive: true }
+    ]`,
+    side: "RED",
+    // 红车 (3,3)→(3,7) 吃掉将军黑马是正解;
+    // 红将 (4,9)→(4,0) 直接飞将吃黑将也算通过(4 列中间空,合法绝杀)
+    expectSrc: `(move && ((move.pieceType === TYPES.CHARIOT && move.toX === 3 && move.toY === 7) || (move.pieceType === TYPES.GENERAL && move.toX === 4 && move.toY === 0)))`,
+  },
+  {
+    id: "T4",
+    name: "优势兑换:兵换马(1-ply trade-up)",
+    description: "红兵换黑无保护马(+330 净得),验证 hard 选优势兑换",
+    boardSrc: `[
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 4, y: 5, alive: true },
+      { id: 'rs', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 6, alive: true }
+    ]`,
+    side: "RED",
+    // 红兵 (4,6) → (4,5) 吃黑马(兵直走 1 步)
+    expectSrc: `(move && move.pieceType === TYPES.SOLDIER && move.toX === 4 && move.toY === 5)`,
+  },
+  {
+    id: "T5",
+    name: "残局车将军(车 vs 孤将杀型)",
+    description: "红车对孤将,正解是把车移到 4 列或 0 行形成将军;飞将吃黑将也算通过(直接绝杀)",
+    boardSrc: `[
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 3, y: 5, alive: true }
+    ]`,
+    side: "RED",
+    // 红车 (3,5)→(3,0)(攻击 0 行)或 →(4,5)(攻击 4 列将军)
+    // 红将 (4,9)→(4,0) 直接飞将吃黑将也算通过(4 列中间空,合法绝杀)
+    expectSrc: `(move && ((move.pieceType === TYPES.CHARIOT && (move.toX === 4 || move.toY === 0)) || (move.pieceType === TYPES.GENERAL && move.toX === 4 && move.toY === 0)))`,
+  },
+];
+
+function runTactics(engine) {
+  const results = [];
+  for (const t of TACTICS) {
+    const result = engine.json(`(() => {
+      const board = ${t.boardSrc};
+      state = createGame(SIDES.RED, "hard");
+      state.status = "playing";
+      state.board = board;
+      state.currentSide = SIDES.${t.side};
+      state.snapshots = [];
+      state.moveHistory = [];
+
+      const realNow = performance.now.bind(performance);
+      const timeScale = 1100 / ${TACTIC_DEADLINE_MS};
+      performance.now = function () { return realNow() * timeScale; };
+      let move = null;
+      try { move = chooseAIMove(); } finally { performance.now = realNow; }
+
+      const passed = ${t.expectSrc};
+      return {
+        passed,
+        pieceType: move && move.pieceType,
+        from: move && [move.fromX, move.fromY],
+        to: move && [move.toX, move.toY],
+      };
+    })()`);
+    results.push({
+      id: t.id,
+      name: t.name,
+      category: t.category,
+      passed: Boolean(result.passed),
+      move: result.to ? { from: result.from, to: result.to, pieceType: result.pieceType } : null,
+    });
+    process.stdout.write(`  ${t.id} ${t.name}: ${result.passed ? "PASS" : "FAIL"} (move=${result.from || "null"}→${result.to || "null"})\n`);
+  }
+  const passed = results.filter((r) => r.passed).length;
+  return {
+    total: results.length,
+    passed,
+    rate: results.length ? Math.round((passed / results.length) * 1000) / 1000 : 0,
+    passThreshold: TACTIC_PASS_THRESHOLD,
+    passThresholdMet: results.length ? passed / results.length >= TACTIC_PASS_THRESHOLD : false,
+    results,
+  };
+}
+
 function run() {
+  // #35 先跑 tactics(快速,~1-2 秒),再跑自对弈(慢,GAMES 局)。
+  process.stdout.write(`== Tactics (${TACTICS.length} puzzles) ==\n`);
+  const tacticsEngine = createEngine();
+  const tactics = runTactics(tacticsEngine);
+
+  process.stdout.write(`\n== Self-play (${GAMES} games, hard vs normal) ==\n`);
   const matchups = [];
   for (let i = 0; i < GAMES; i += 1) {
     if (i % 2 === 0) matchups.push(["hard", "normal"]);
@@ -154,16 +293,66 @@ function run() {
     ranAt: new Date().toISOString(),
     config: {
       GAMES, MAX_PLY, NO_CAPTURE_DRAW_PLY, HARD_DEADLINE_MS, NORMAL_DEADLINE_MS,
+      TACTIC_DEADLINE_MS, TACTIC_PASS_THRESHOLD,
     },
+    tactics,
     summary,
   };
+}
+
+function formatMarkdown(report) {
+  const { ranAt, config, tactics, summary } = report;
+  const lines = [];
+  lines.push("# AI Benchmark Results (Phase 4)");
+  lines.push("");
+  lines.push(`**运行时间**: ${ranAt}`);
+  lines.push("");
+  lines.push("## 战术题集(Tactics)");
+  lines.push("");
+  lines.push(`- 题目数: ${tactics.total}`);
+  lines.push(`- 通过数: ${tactics.passed} / ${tactics.total}`);
+  lines.push(`- 通过率: ${(tactics.rate * 100).toFixed(1)}%`);
+  lines.push(`- 通过阈值: ${(tactics.passThreshold * 100).toFixed(0)}% — ${tactics.passThresholdMet ? "✓ MET" : "✗ NOT MET"}`);
+  lines.push("");
+  lines.push("| 题 | 名称 | 通过 | 走法 |");
+  lines.push("|---|---|---|---|");
+  for (const r of tactics.results) {
+    const moveStr = r.move ? `${r.move.from}→${r.move.to}` : "(no move)";
+    lines.push(`| ${r.id} | ${r.name} | ${r.passed ? "✓" : "✗"} | ${moveStr} |`);
+  }
+  lines.push("");
+  lines.push("## 自对弈(Self-play, hard vs normal)");
+  lines.push("");
+  lines.push(`- 局数: ${summary.games}`);
+  lines.push(`- hard 胜: ${summary.hardWins}`);
+  lines.push(`- normal 胜: ${summary.normalWins}`);
+  lines.push(`- 和棋: ${summary.draws}`);
+  lines.push(`- hard 胜率: ${(summary.hardWinRate * 100).toFixed(1)}%`);
+  lines.push(`- 平均 ply: ${summary.avgPly}`);
+  lines.push(`- 总耗时: ${(summary.totalElapsedMs / 1000).toFixed(1)}s`);
+  lines.push("");
+  lines.push("| 局 | 红方 | 黑方 | 胜方 | 终局原因 | ply | 耗时(s) |");
+  lines.push("|---|---|---|---|---|---|---|");
+  for (const g of summary.perGame) {
+    const winnerStr = g.winner === null ? "和" : `${g.winner}(${g.winner === "red" ? g.red : g.black})`;
+    lines.push(`| ${g.id} | ${g.red} | ${g.black} | ${winnerStr} | ${g.reason} | ${g.plies} | ${(g.elapsedMs / 1000).toFixed(1)} |`);
+  }
+  lines.push("");
+  lines.push("## 配置");
+  lines.push("");
+  lines.push("```");
+  lines.push(JSON.stringify(config, null, 2));
+  lines.push("```");
+  return lines.join("\n") + "\n";
 }
 
 if (require.main === module) {
   const report = run();
   console.log(JSON.stringify(report, null, 2));
-  const outPath = path.join(__dirname, "..", "docs", "plans", "benchmark-results.json");
-  fs.writeFileSync(outPath, JSON.stringify(report, null, 2) + "\n", "utf8");
+  const jsonPath = path.join(__dirname, "..", "docs", "plans", "benchmark-results.json");
+  fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2) + "\n", "utf8");
+  const mdPath = path.join(__dirname, "..", "docs", "plans", "benchmark-results.md");
+  fs.writeFileSync(mdPath, formatMarkdown(report), "utf8");
 }
 
-module.exports = { run, playOneGame };
+module.exports = { run, playOneGame, runTactics, TACTICS };

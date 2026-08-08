@@ -626,3 +626,26 @@ test("endgame pattern: chariot+cannon vs lone chariot is recognized as winning",
     `evaluateBoard(board, RED) should be > 500 (winning pattern + material advantage); got ${result.evalRed}`,
   );
 });
+
+test("#35 benchmark tactics: 5 puzzles with valid contract", () => {
+  // 契约:#35 benchmark 扩展必须含 5 个战术题,每题有 id/name/side/boardSrc/expectSrc。
+  // side 必须是 RED 或 BLACK(交替,覆盖红黑两方战术),且谓词 expectSrc 必须是非空字符串。
+  const { TACTICS } = require("./ai-benchmark");
+  assert.equal(TACTICS.length, 5, "TACTICS should have exactly 5 puzzles");
+
+  const ids = TACTICS.map((t) => t.id);
+  assert.deepEqual(ids, ["T1", "T2", "T3", "T4", "T5"], "TACTICS ids should be T1-T5");
+
+  const sides = new Set(TACTICS.map((t) => t.side));
+  assert.ok(sides.has("RED") && sides.has("BLACK"), "TACTICS should cover both RED and BLACK sides");
+
+  for (const t of TACTICS) {
+    assert.ok(typeof t.name === "string" && t.name.length > 0, `${t.id}: name required`);
+    assert.ok(typeof t.boardSrc === "string" && t.boardSrc.length > 0, `${t.id}: boardSrc required`);
+    assert.ok(typeof t.expectSrc === "string" && t.expectSrc.length > 0, `${t.id}: expectSrc required`);
+    assert.ok(t.expectSrc.includes("move"), `${t.id}: expectSrc must reference 'move' variable`);
+    // boardSrc 必须构造合法 piece 数组
+    assert.ok(t.boardSrc.includes("TYPES.GENERAL"), `${t.id}: boardSrc must include a general`);
+    assert.ok(t.boardSrc.includes("alive: true"), `${t.id}: pieces must have alive: true`);
+  }
+});
