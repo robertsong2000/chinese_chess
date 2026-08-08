@@ -32,7 +32,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 6,
+  "current_phase": 7,
   "phases": [
     {
       "id": 1,
@@ -81,7 +81,16 @@
       "name": "棋力深度优化 V2(冲击一级棋士 2200 - 反先胜)",
       "todo_count": 6,
       "priority": "P0",
-      "rationale": "Phase 5 修复 Phase 4 退化后,hard 执黑仍只能逼和 normal。本阶段通过更深的搜索效率(quiescence/TT/LMP)+ 更精的 eval + 长 benchmark 验证,目标 hard 执黑能反先胜 normal(棋力 ~2200 一级棋士)"
+      "rationale": "Phase 5 修复 Phase 4 退化后,hard 执黑仍只能逼和 normal。本阶段通过更深的搜索效率(quiescence/TT/LMP)+ 更精的 eval + 长 benchmark 验证,目标 hard 执黑能反先胜 normal(棋力 ~2200 一级棋士)",
+      "status": "done",
+      "completed_at": "2026-08-08T22:14:32+08:00"
+    },
+    {
+      "id": 7,
+      "name": "棋力深度冲刺 V3(冲击一级棋士 2200 稳态 + 攻击性提升)",
+      "todo_count": 1,
+      "priority": "P0",
+      "rationale": "Phase 1-6 已建立完整 AI 引擎基础(开局库 + LMR + Null move + Killer + History + TT + SEE + Futility + Razoring + LMP + IID + PVS + Quiescence Delta + Check Extension + 战术/残局识别)。Phase 7 继续经典深度优化:Countermove Heuristic、Singular Extension、TT depth-aware prefetch、扩展开局库等,目标 hard 在 self-play 中对 normal 形成 60%+ 胜率,棋力稳定在一级棋士(2200)。"
     }
   ],
   "todos": [
@@ -791,14 +800,35 @@
       "phase": 6,
       "category": "棋力-search启发",
       "title": "Killer / History 表深度调优 + IID 验证",
-      "description": "KILLER_TABLE_PLY 当前固定 64,History 表更新公式可能过简。调优 + IID 触发条件验证。直接服务 move ordering 质量 → LMR/PVS 准确性 → 搜索深度。",
+      "description": "[本次完成 2026-08-08] Phase 6 收尾:Killer/History 表深度调优 + history bonus 公式改进。\n改动:\n1) MAX_KILLER_PLY 32→64:保险值,防止 hard(SEARCH_DEPTH.hard=5)+ check extension/null move/IID 叠加后\n   ply 超过 32 时所有深层 cutoff 走法堆在 boundary slot(killers[Math.min(ply, len-1)]),killer 信号互相覆盖。\n2) 新增 HISTORY_BONUS_DEPTH_OFFSET=1:storeHistory 公式 depth*depth → (depth+1)^2。\n   depth=1 cutoff 累积 4(原 1),depth=5 累积 36(原 25)。让低深度 cutoff 信号不被深 cutoff 淹没,\n   直接服务 move ordering 质量 → LMR/PVS 准确性 → 搜索深度。\n3) IID 触发条件保持 IID_MIN_DEPTH=3(经典值,与 Stockfish 一致),不动。\n4) 3 个回归测试:常量契约 / storeHistory depth scaling(depth=5 vs depth=1 ratio>=3)/ killer 表 deep ply\n   不坍缩(slot[40] vs slot[50] distinct,验证 MAX_KILLER_PLY 调整生效)。\n47/47 测试通过(原 44 + 新增 3)。Phase 6 全部 6/6 done。棋力 ~1900-2000(二级棋士),\nPhase 4-6 累积优化(quiescence delta pruning / LMP / TT replacement / mobility refinement /\ntactics 扩展 / killer+history 调优)预期长 benchmark(BENCH_LONG=1)中体现 self-play 收益。",
       "files": [
         "src/search.js"
       ],
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 25,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-08T22:14:32+08:00",
+      "commit_sha": "6243590",
+      "full_commit_sha": "624359072c9b26716ce059fb107d8e1f96e1384d"
+    },
+    {
+      "id": 44,
+      "phase": 7,
+      "category": "棋力-搜索",
+      "title": "Countermove Heuristic(cutoff 走法按对手上一走法索引)",
+      "description": "新增 countermove table:在 negamax 中,若走法 M 导致 beta cutoff,且对方上一走法是 oppMove,则记下 counterMoves[oppMove.key] = M.key。moveOrderingScore 命中时给 COUNTERMOVE_BONUS=6500(介于 KILLER_BONUS_SECOND=7000 与 HISTORY_MAX_BONUS=6000)。与 killer/history 互补:killer 是同 ply 场景级,history 是全局频次级,countermove 是 refutation 级(针对对方具体走法的最佳回应)。命中后类 killer 优先级,经典实现给搜索效率 +5-10%,直接服务看 5-7 步。",
+      "files": [
+        "src/constants.js",
+        "src/search.js",
+        "tests/ai-search.test.js"
+      ],
+      "priority": "P0",
+      "status": "done",
+      "estimated_min": 20,
+      "attempts": 1,
+      "completed_at": "2026-08-08T22:50:03.602014+08:00",
+      "commit_sha": "2655094"
     }
   ],
   "history": [
@@ -1134,6 +1164,21 @@
       "summary": "#42 扩展 tactics 5→10:T6 炮吃马(via 屏)/ T7 兵吃马/ T8 防守反吃车/ T9 红马 fork 双高价值/ T10 双炮重叠吃车(T10 将错开列避免前炮 1-ply 杀将漏洞)。BENCH_LONG=1 默认 20 局 self-play。契约测试升级:>=10 题 + T6-T10 覆盖 >=4 种 pieceType。10/10 战术 pass(100%),44/44 测试通过。",
       "commit_sha": "77fb137",
       "full_commit_sha": "77fb137650e368f3a1ca75eaa49e59638fee2659"
+    },
+    {
+      "timestamp": "2026-08-08T22:14:32+08:00",
+      "todo_id": 43,
+      "action": "completed",
+      "summary": "#43 Killer/History 表深度调优:MAX_KILLER_PLY 32→64(保险,防 ply 边界坍缩)+ 新增 HISTORY_BONUS_DEPTH_OFFSET=1(storeHistory depth*depth → (depth+1)^2,depth=1 cutoff 累积 4 而非 1)。IID_MIN_DEPTH 保持 3(经典值)。3 个回归测试(常量契约 + depth scaling + deep ply 不坍缩)。47/47 测试通过(原 44 + 新增 3)。Phase 6 全部 6/6 done。",
+      "commit_sha": "6243590",
+      "full_commit_sha": "624359072c9b26716ce059fb107d8e1f96e1384d"
+    },
+    {
+      "timestamp": "2026-08-08T22:50:03.602014+08:00",
+      "todo_id": 44,
+      "action": "completed",
+      "summary": "#44 Countermove Heuristic: 新增 createCountermoveTable/storeCountermove,negamax cutoff 时记 (oppMove -> counterMove),moveOrdering 命中时 +6500;negamax/orderMoves/searchRootAtDepth 新增 counterMoves+lastOppMove 参数,递归传 move。48 测试全过 + 2 局 self-play 1 胜 1 和 0 输 + 战术 10/10 全过,无退化。",
+      "commit_sha": "2655094"
     }
   ],
   "rules": [
@@ -1145,5 +1190,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 6 #42 完成:tactics 5→10 + BENCH_LONG=1 (20 局)。新 T6-T10 覆盖炮(via 屏)/ 兵 / 防守反吃 / 红方 fork / 双炮重叠。10/10 pass(100%)。44/44 测试通过。Phase 6 进度:5/6 done(#38-42),剩 1 项:#43 Killer/History 表深度调优 + IID 验证(KILLER_TABLE_PLY / history update formula / IID 触发)。建议下一个 TODO:#43(Phase 6 收尾),或长 benchmark(BENCH_LONG=1)验证近期优化的 self-play 真实效果。棋力 ~1900-2000(二级棋士)。"
+  "next_run_hint": "Phase 6 全部 6/6 done(#38-43):quiescence delta pruning / LMP / TT replacement / mobility refinement / tactics 扩展 / killer+history 调优。棋力 ~1900-2000(二级棋士)。建议下一步:1) 跑长 benchmark (BENCH_LONG=1,默认 20 局)验证近期优化的 self-play 真实效果,看 hard vs normal 胜率是否突破 0.5; 2) 若仍 0.5,生成 Phase 7 TODO 聚焦 evaluation 精度(如 pawn structure / king attack zone)或 search depth(如 multi-threaded search / pondering);3) 用户对 Phase 4-6 退化定位+修复的累积成果可考虑 push 到 remote(gh 待 auth)。"
 }
