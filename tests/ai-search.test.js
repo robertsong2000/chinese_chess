@@ -645,6 +645,106 @@ test("endgame pattern bonus constants cover 5 winning patterns at >= 200", () =>
   assert.ok(result.horseSoldierVsAdvisor <= 300, "horseSoldierVsAdvisor should be <= 300 (#36 cap)");
 });
 
+test("king attack zone constants cover palace + buffer + multi-attacker", () => {
+  // 契约:KING_ATTACK 覆盖车马炮在敌宫 + 邻接缓冲行 + 兵进宫 + 多攻击子协同。
+  // 取值保守(参考子力:兵 100 / 马 430 / 炮 450 / 车 900),远低于子力分,
+  // 防止 #36/#37 类 self-play 退化(原 ENDGAME_PATTERN_BONUS 500/500 引入退化,降 ~40% 后修复)。
+  // - in-palace 加分 22-30(车>炮>马:车控制纵深最大,炮借助宫内子作架,马控制要点)
+  // - adjacent 加分 10-15(缓冲行约 1/2 in-palace 效力)
+  // - soldier 加分 8-18(过河兵升变威胁,弱于攻子)
+  // - multiAttackerBonus=20:2+ 攻击子协同,每个额外攻击子 +20
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    inPalaceChariot: KING_ATTACK.inPalaceChariot,
+    inPalaceCannon: KING_ATTACK.inPalaceCannon,
+    inPalaceHorse: KING_ATTACK.inPalaceHorse,
+    adjacentChariot: KING_ATTACK.adjacentChariot,
+    adjacentCannon: KING_ATTACK.adjacentCannon,
+    adjacentHorse: KING_ATTACK.adjacentHorse,
+    soldierInPalace: KING_ATTACK.soldierInPalace,
+    soldierAdjacent: KING_ATTACK.soldierAdjacent,
+    multiAttackerBonus: KING_ATTACK.multiAttackerBonus,
+  }))()`);
+  // in-palace:车 > 炮 > 马,均在 20-35
+  assert.ok(result.inPalaceChariot >= 20 && result.inPalaceChariot <= 35, "inPalaceChariot in [20,35]");
+  assert.ok(result.inPalaceCannon >= 18 && result.inPalaceCannon <= 30, "inPalaceCannon in [18,30]");
+  assert.ok(result.inPalaceHorse >= 15 && result.inPalaceHorse <= 28, "inPalaceHorse in [15,28]");
+  assert.ok(result.inPalaceChariot > result.inPalaceCannon, "chariot > cannon in palace");
+  assert.ok(result.inPalaceCannon > result.inPalaceHorse, "cannon > horse in palace");
+  // adjacent:均 < 对应 in-palace
+  assert.ok(result.adjacentChariot < result.inPalaceChariot, "adjacent < inPalace for chariot");
+  assert.ok(result.adjacentCannon < result.inPalaceCannon, "adjacent < inPalace for cannon");
+  assert.ok(result.adjacentHorse < result.inPalaceHorse, "adjacent < inPalace for horse");
+  // soldier:in-palace > adjacent,均 < 攻子
+  assert.ok(result.soldierInPalace > result.soldierAdjacent, "soldier inPalace > adjacent");
+  assert.ok(result.soldierInPalace < result.inPalaceHorse, "soldier < horse (weakest attacker)");
+  // multi-attacker:每个额外攻击子加分(15-30)
+  assert.ok(result.multiAttackerBonus >= 15 && result.multiAttackerBonus <= 30, "multiAttackerBonus in [15,30]");
+});
+
+test("king attack zone: red chariot + horse in black palace scores higher than baseline", () => {
+  // 战术局面:红车 (4,1) 在黑宫中央 + 红马 (3,2) 在黑宫角落,黑将 (4,0)。
+  // 子力对称:红方 车+马+炮,黑方 车+马+炮(各自总子力 1780)。
+  // 红车 (4,1) 在黑宫(y=0-2,x=3-5)→ inPalaceChariot 加分
+  // 红马 (3,2) 在黑宫(y=0-2,x=3-5)→ inPalaceHorse 加分
+  // 2 攻击子聚集 → multiAttackerBonus × 1 = 20
+  // 红炮 (1,7) 在己方半场不参与 attack zone。
+  // 黑方子均在自己半场但远离红宫(y=7-9,x=3-5):
+  //   黑车 (8,5) / 黑马 (8,2) / 黑炮 (1,2) — 都不在红宫区域 → kingAttackBonus(black) = 0
+  // 红将 (3,9) 与黑将 (4,0) 错列避免飞将。
+  // 期望:
+  //   1) kingAttackBonus(board, RED) >= inPalaceChariot + inPalaceHorse + multiAttackerBonus = 30+22+20 = 72
+  //   2) kingAttackBonus(board, BLACK) == 0(黑方子不在红宫区域)
+  //   3) evaluateBoard(board, RED) > 0(子力对称 + attack zone 加分使红方占优)
+  //   4) 初始对称局面:kingAttackBonus(initial, RED) == kingAttackBonus(initial, BLACK) == 0
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const scenario = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 4, y: 1, alive: true },
+      { id: 'rh', side: SIDES.RED, type: TYPES.HORSE, x: 3, y: 2, alive: true },
+      { id: 'rp', side: SIDES.RED, type: TYPES.CANNON, x: 1, y: 7, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 8, y: 5, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 8, y: 2, alive: true },
+      { id: 'bp', side: SIDES.BLACK, type: TYPES.CANNON, x: 1, y: 2, alive: true },
+    ];
+    const redAttack = kingAttackBonus(scenario, SIDES.RED);
+    const blackAttack = kingAttackBonus(scenario, SIDES.BLACK);
+    const evalRed = evaluateBoard(scenario, SIDES.RED);
+    // 初始对称局面(只放双方将 + 双方士象完整原始布局省略,这里直接用纯将对称)
+    const symmetricBoard = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+    ];
+    const initRed = kingAttackBonus(symmetricBoard, SIDES.RED);
+    const initBlack = kingAttackBonus(symmetricBoard, SIDES.BLACK);
+    return {
+      redAttack,
+      blackAttack,
+      evalRed,
+      initRed,
+      initBlack,
+    };
+  })()`);
+  const expectedMin = 30 + 22 + 20; // inPalaceChariot + inPalaceHorse + 1x multiAttackerBonus
+  assert.ok(
+    result.redAttack >= expectedMin,
+    `kingAttackBonus(red) should be >= ${expectedMin} (30 chariot + 22 horse + 20 multi-attacker); got ${result.redAttack}`,
+  );
+  assert.equal(
+    result.blackAttack,
+    0,
+    `kingAttackBonus(black) should be 0 (no black pieces in red palace zone); got ${result.blackAttack}`,
+  );
+  assert.ok(
+    result.evalRed > 0,
+    `evaluateBoard(board, RED) should be > 0 (symmetric material + attack zone bonus); got ${result.evalRed}`,
+  );
+  assert.equal(result.initRed, 0, `kingAttackBonus on symmetric minimal board (red) should be 0; got ${result.initRed}`);
+  assert.equal(result.initBlack, 0, `kingAttackBonus on symmetric minimal board (black) should be 0; got ${result.initBlack}`);
+});
+
 test("endgame pattern: chariot+cannon vs lone chariot is recognized as winning", () => {
   // 残局局面:红方 车+炮+将,黑方 车+将(经典必胜 — 车炮胜单车)。
   // 期望:

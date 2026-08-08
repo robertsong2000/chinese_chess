@@ -1138,6 +1138,9 @@ function evaluateBoard(board, aiSide) {
   // 实用残局模式:识别必胜结构,鼓励换子进入
   score += endgamePatternBonus(board, aiSide);
   score -= endgamePatternBonus(board, opposite(aiSide));
+  // #49 King Attack Zone:敌宫及邻接缓冲行聚集车马炮 → 进攻方加分
+  score += kingAttackBonus(board, aiSide);
+  score -= kingAttackBonus(board, opposite(aiSide));
   return score;
 }
 
@@ -1425,6 +1428,48 @@ function cannonPalaceThreatBonus(piece, board) {
       if (p.x > lo && p.x < hi) screens += 1;
     }
     if (screens === 1) bonus += MOBILITY_REFINEMENT.cannonPalaceThreat;
+  }
+  return bonus;
+}
+
+// #49 King Attack Zone eval:side 方在敌宫(3-5 列 × 敌方 3 行)+ 邻接缓冲行
+// 聚集车马炮 → 加分;2+ 攻击子聚集额外加 multi-attacker bonus;过河兵进宫也加分。
+// 返回 side 方获得的 King Attack 加分总和。直接服务"完全不送子"(让 AI 知道
+// 多子压境时无需送子)和"中局战术组合能力"(鼓励车马炮协同进宫)。
+// 对称不变量:初始局面双方均 0 加分(所有子均在自己半场,无子越过河界进入敌宫区域)。
+function kingAttackBonus(board, side) {
+  if (!KING_ATTACK) return 0;
+  const enemy = opposite(side);
+  const isEnemyRed = enemy === SIDES.RED;
+  // 敌方宫的行范围(红宫 7-9 / 黑宫 0-2)+ 邻接缓冲行(攻红=6 / 攻黑=3)
+  const palaceYMin = isEnemyRed ? 7 : 0;
+  const palaceYMax = isEnemyRed ? 9 : 2;
+  const bufferY = isEnemyRed ? 6 : 3;
+  let bonus = 0;
+  let attackersInZone = 0;
+  for (const piece of livePieces(board)) {
+    if (piece.side !== side) continue;
+    const inPalaceCols = piece.x >= 3 && piece.x <= 5;
+    if (!inPalaceCols) continue;
+    const inPalace = piece.y >= palaceYMin && piece.y <= palaceYMax;
+    const inBuffer = piece.y === bufferY;
+    if (!inPalace && !inBuffer) continue;
+    if (piece.type === TYPES.CHARIOT) {
+      bonus += inPalace ? KING_ATTACK.inPalaceChariot : KING_ATTACK.adjacentChariot;
+      attackersInZone += 1;
+    } else if (piece.type === TYPES.CANNON) {
+      bonus += inPalace ? KING_ATTACK.inPalaceCannon : KING_ATTACK.adjacentCannon;
+      attackersInZone += 1;
+    } else if (piece.type === TYPES.HORSE) {
+      bonus += inPalace ? KING_ATTACK.inPalaceHorse : KING_ATTACK.adjacentHorse;
+      attackersInZone += 1;
+    } else if (piece.type === TYPES.SOLDIER) {
+      bonus += inPalace ? KING_ATTACK.soldierInPalace : KING_ATTACK.soldierAdjacent;
+    }
+  }
+  // 多攻击子聚集 → 战术组合能力 bonus(车马炮协同)
+  if (attackersInZone >= 2) {
+    bonus += KING_ATTACK.multiAttackerBonus * (attackersInZone - 1);
   }
   return bonus;
 }

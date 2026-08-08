@@ -426,6 +426,23 @@ const TACTIC_BONUS = {
 // fork / discovered 检测的"高价值子"类型(车/马/炮)
 const TACTIC_HIGH_VALUE_TYPES = ["chariot", "horse", "cannon"];
 
+// #49 King Attack Zone eval:攻击方在敌宫(3-5 列 × 敌方 3 行)及邻接缓冲行聚集车马炮
+// → 加分;2+ 攻击子聚集额外加 multi-attacker bonus。直接服务"完全不送子"
+// (让 AI 在评估时知道"我方多子压境,无需送子即可进攻")和"中局战术组合能力"
+// (鼓励车马炮协同进宫)。取值保守(参考子力:兵 100 / 马 430 / 炮 450 / 车 900),
+// 远低于子力分,避免覆盖 #36/#37 类 self-play 退化教训。
+const KING_ATTACK = {
+  inPalaceChariot: 30,        // 车进入敌宫(x=3-5,y 在敌方 3 行内)
+  inPalaceCannon: 25,         // 炮进入敌宫
+  inPalaceHorse: 22,          // 马进入敌宫
+  adjacentChariot: 15,        // 车在邻接缓冲行(x=3-5,y 在缓冲行)
+  adjacentCannon: 12,         // 炮在邻接缓冲行
+  adjacentHorse: 10,          // 马在邻接缓冲行
+  soldierInPalace: 18,        // 过河兵进敌宫(升变威胁)
+  soldierAdjacent: 8,         // 过河兵在敌宫缓冲行
+  multiAttackerBonus: 20,     // 2+ 攻击子聚集(车马炮)时每个额外攻击子加分
+};
+
 const MOBILITY_VALUE = {
   general: 0,
   advisor: 1,
