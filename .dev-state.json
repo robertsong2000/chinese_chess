@@ -766,7 +766,8 @@
       "estimated_min": 25,
       "attempts": 1,
       "completed_at": "2026-08-08T21:15:38.363418+08:00",
-      "commit_sha": "PENDING"
+      "commit_sha": "7a2f4d89",
+      "full_commit_sha": "7a2f4d898fbade149c39c6a8ae3350016c92a0f1"
     },
     {
       "id": 42,
@@ -1120,7 +1121,8 @@
       "todo_id": 41,
       "action": "completed",
       "summary": "#41 评估函数车马炮 mobility 精化:chariotOpenFile(25)/chariotSemiOpenFile(12)/horseCenter(10)/cannonPalaceThreat(18)。3 个精化函数(mobilityRefinementBonus 调度)+ evaluateBoard 接入。初始局面 0 加分(对称不变量保持)。+4 测试(对称 + 车 + 马 + 炮)。",
-      "commit_sha": "PENDING"
+      "commit_sha": "7a2f4d89",
+      "full_commit_sha": "7a2f4d898fbade149c39c6a8ae3350016c92a0f1"
     }
   ],
   "rules": [
