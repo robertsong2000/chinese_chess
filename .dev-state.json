@@ -961,9 +961,11 @@
         "src/search.js"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 20,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-09T01:49:16.815404+08:00",
+      "commit_sha": "5e764d9"
     },
     {
       "id": 51,
@@ -975,9 +977,12 @@
         "src/search.js"
       ],
       "priority": "P1",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 20,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-09T02:13:28+08:00",
+      "commit_sha": "8ce551f",
+      "full_commit_sha": "8ce551f7d32f66b560856657c476c5cff367424a"
     },
     {
       "id": 52,
@@ -1381,6 +1386,21 @@
       "summary": "#49 King Attack Zone eval: 新增 kingAttackBonus(board, side) 函数 + KING_ATTACK 常量(9 字段:inPalace 车30/炮25/马22,adjacent 车15/炮12/马10,soldier inPalace18/adjacent8,multiAttackerBonus20)。识别 side 方在敌宫(3-5 列 × 敌方 3 行)+ 邻接缓冲行的车马炮按 inPalace>adjacent 档位加分,2+ 攻击子聚集每个额外 +20 multi-attacker bonus,过河兵进宫也加分。evaluateBoard 末尾双向相减。对称不变量:初始局面 0 加分。直接服务『完全不送子』+『中局战术组合能力』。取值保守远低于子力分避免 #36/#37 类 self-play 退化。2 个回归测试(常量契约 + 红车红马在黑宫战术局面)。56/56 测试通过(原 54 + 新增 2)。",
       "commit_sha": "086f9bf",
       "full_commit_sha": "086f9bf80c8ea98dd99ef33f741411def22100d9"
+    },
+    {
+      "timestamp": "2026-08-09T01:49:16.815404+08:00",
+      "todo_id": 50,
+      "action": "completed",
+      "summary": "#50 endgamePatternBonus 扩展 3 模式:chariotVsLoneHorse(160)/ chariotVsLoneCannon(160)/ twoChariotsVsSingleAttacker(180)。沿用 isEndgame 守卫防中局误触发。Phase 9 done, Phase 10 active。56/56 pass, 4 局 benchmark hardWinRate=0.5(噪声范围未退化)。",
+      "commit_sha": "5e764d9"
+    },
+    {
+      "timestamp": "2026-08-09T02:13:28+08:00",
+      "todo_id": 51,
+      "action": "completed",
+      "summary": "#51 Soldier 推进评估精化: 新增 endgameSoldierCenterBonus(piece) 给过河兵在敌宫中心列(x=4)+12 / 侧列(x=3,5)+6 加分;endgameSoldierCoordinationBonus(board, side) 按 pair 计数同列/同行/相邻双过河兵每对 +22(残局必胜结构)。evaluateBoard per-piece loop 加 center bonus,末尾加 endgame 双向 coordination bonus(对称守卫)。常量 ENDGAME_SOLDIER_CENTER_BONUS={center:12, edge:6} / ENDGAME_DOUBLE_SOLDIER_BONUS=22。与 #49 KING_ATTACK.soldierInPalace 互补(#49 无中心区分)。取值保守避免 #36/#37 self-play 退化。58/58 测试通过(原 56 + 新增 2:常量契约 + 战术局面双兵同列协同)。",
+      "commit_sha": "8ce551f",
+      "full_commit_sha": "8ce551f7d32f66b560856657c476c5cff367424a"
     }
   ],
   "rules": [

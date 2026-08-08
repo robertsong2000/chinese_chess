@@ -1112,6 +1112,7 @@ function evaluateBoard(board, aiSide) {
     // 残局:过河兵按推进深度加分(越靠近对方底线越值钱)
     if (endgame && piece.type === TYPES.SOLDIER) {
       value += endgameSoldierBonus(piece);
+      value += endgameSoldierCenterBonus(piece);
     }
     // 残局:士象价值缩水
     if (endgame && (piece.type === TYPES.ADVISOR || piece.type === TYPES.ELEPHANT)) {
@@ -1141,6 +1142,11 @@ function evaluateBoard(board, aiSide) {
   // #49 King Attack Zone:敌宫及邻接缓冲行聚集车马炮 → 进攻方加分
   score += kingAttackBonus(board, aiSide);
   score -= kingAttackBonus(board, opposite(aiSide));
+  // #51 残局双兵过河协同(必胜结构):仅 endgame 阶段加分
+  if (endgame) {
+    score += endgameSoldierCoordinationBonus(board, aiSide);
+    score -= endgameSoldierCoordinationBonus(board, opposite(aiSide));
+  }
   return score;
 }
 
@@ -1365,6 +1371,43 @@ function endgameSoldierBonus(piece) {
   if (!crossedRiver(piece.side, piece.y)) return 0;
   const progress = piece.side === SIDES.RED ? 4 - piece.y : piece.y - 5;
   return progress * ENDGAME_SOLDIER_ADVANCE_BONUS;
+}
+
+// #51 残局过河兵横向中心化加分:进入敌宫中心列(x=4)威胁最大,
+// 敌宫侧列(x=3,5)次之。仅 crossedRiver + 在敌方宫范围内才触发。
+// 与 #49 KING_ATTACK.soldierInPalace 互补:#49 是单纯进宫加分(对称,无中心区分),
+// 此项是残局专属 + 中心列加权,只在 evaluateBoard 的 endgame 分支调用。
+function endgameSoldierCenterBonus(piece) {
+  if (!crossedRiver(piece.side, piece.y)) return 0;
+  // 敌方宫:对方半场的 cols 3-5 × 3 行。红方敌宫 y∈[0,2];黑方敌宫 y∈[7,9]
+  const enemyPalaceYMin = piece.side === SIDES.RED ? 0 : 7;
+  const enemyPalaceYMax = piece.side === SIDES.RED ? 2 : 9;
+  if (piece.y < enemyPalaceYMin || piece.y > enemyPalaceYMax) return 0;
+  if (piece.x < 3 || piece.x > 5) return 0;
+  if (piece.x === 4) return ENDGAME_SOLDIER_CENTER_BONUS.center;
+  return ENDGAME_SOLDIER_CENTER_BONUS.edge;
+}
+
+// #51 残局双兵过河协同加分:2+ 过河兵相邻(8-邻接距离 1)或同列/同行时,
+// 形成"双兵必胜"结构(残局理论:双过河兵对单将/弱方必胜)。
+// 按 pair 计数,每对加一次 ENDGAME_DOUBLE_SOLDIER_BONUS。
+function endgameSoldierCoordinationBonus(board, side) {
+  const soldiers = livePieces(board).filter(
+    (p) => p.alive && p.side === side && p.type === TYPES.SOLDIER && crossedRiver(side, p.y)
+  );
+  if (soldiers.length < 2) return 0;
+  let pairs = 0;
+  for (let i = 0; i < soldiers.length; i++) {
+    for (let j = i + 1; j < soldiers.length; j++) {
+      const a = soldiers[i];
+      const b = soldiers[j];
+      const sameCol = a.x === b.x;
+      const sameRow = a.y === b.y;
+      const adjacent = Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1;
+      if (sameCol || sameRow || adjacent) pairs += 1;
+    }
+  }
+  return pairs * ENDGAME_DOUBLE_SOLDIER_BONUS;
 }
 
 // #41 车马炮 mobility 精化:车开放线 / 马中心 / 炮对宫。

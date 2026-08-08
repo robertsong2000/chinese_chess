@@ -383,6 +383,16 @@ const KING_SAFETY = {
 const ENDGAME_MATERIAL_THRESHOLD = 1800;
 // 残局阶段:过河兵越靠近对方底线加分越多(每深入 1 行)
 const ENDGAME_SOLDIER_ADVANCE_BONUS = 8;
+// #51 Soldier 推进评估精化:横向中心化 + 双兵过河协同。
+// 直接服务"残局能赢必胜局面"目标:残局中双过河兵必胜,过河兵在敌宫中心列威胁最大。
+// 取值保守(参考子力:兵 100 / 马 430 / 炮 450 / 车 900),避免 #36/#37 类 self-play 退化。
+// 与 #49 KING_ATTACK.soldierInPalace 互补:#49 是单纯进宫加分(对称,无中心区分),
+// 此项是残局专属 + 中心列加权,与 #49 叠加不冲突(语义维度不同)。
+const ENDGAME_SOLDIER_CENTER_BONUS = {
+  center: 12, // 过河兵在敌宫中心列(x=4):威胁最大,可能是将门前
+  edge: 6,    // 过河兵在敌宫侧列(x=3 或 5):次之
+};
+const ENDGAME_DOUBLE_SOLDIER_BONUS = 22; // 残局双兵过河且相邻/同列:每对加分(必胜结构)
 // 残局阶段:车马炮过河额外奖励倍数(在 ATTACK_ZONE_BONUS 之上)
 const ENDGAME_ATTACKER_ZONE_MULTIPLIER = 1.5;
 // 残局阶段:士象价值缩水(守子难以扭转局势)

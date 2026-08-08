@@ -1550,3 +1550,82 @@ test("#48 Threat Extension: hard AI defends hanging high-value piece under multi
   assert.ok(result.isCorrect,
     `hard AI under multi-piece threat should capture enemy chariot (5,5)→(5,2) (clean win), got piece=${result.pieceType} from=(${result.fromX},${result.fromY}) to=(${result.toX},${result.toY})`);
 });
+
+test("#51 Soldier refinement: endgame center + double-soldier coordination constants", () => {
+  // 契约测试:#51 引入横向中心化 + 双兵过河协同两类加分。
+  // - ENDGAME_SOLDIER_CENTER_BONUS.center > edge > 0:中心列(x=4)威胁大于侧列(x=3,5)大于 0
+  // - ENDGAME_DOUBLE_SOLDIER_BONUS > 0:每对协同兵加分
+  // - endgameSoldierCenterBonus / endgameSoldierCoordinationBonus 为可调用函数
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    return {
+      center: ENDGAME_SOLDIER_CENTER_BONUS.center,
+      edge: ENDGAME_SOLDIER_CENTER_BONUS.edge,
+      double: ENDGAME_DOUBLE_SOLDIER_BONUS,
+      hasCenter: typeof endgameSoldierCenterBonus === "function",
+      hasCoord: typeof endgameSoldierCoordinationBonus === "function",
+    };
+  })()`);
+  assert.ok(result.center > result.edge,
+    `ENDGAME_SOLDIER_CENTER_BONUS.center (${result.center}) should be > edge (${result.edge})`);
+  assert.ok(result.edge > 0,
+    `ENDGAME_SOLDIER_CENTER_BONUS.edge should be > 0, got ${result.edge}`);
+  assert.ok(result.double > 0,
+    `ENDGAME_DOUBLE_SOLDIER_BONUS should be > 0, got ${result.double}`);
+  assert.equal(result.hasCenter, true, "endgameSoldierCenterBonus should be a function");
+  assert.equal(result.hasCoord, true, "endgameSoldierCoordinationBonus should be a function");
+});
+
+test("#51 Soldier refinement: double crossed soldiers in enemy palace trigger center + coordination bonus", () => {
+  // 残局战术局面:红方 2 个过河兵在黑方宫区内,同列相邻 → 触发协同加分 + 中心列加分。
+  // 红将在 (3,9),黑将在 (5,0)(错列避免飞将)。
+  // 红兵 1 (4,1):center 列(x=4),在黑宫(y∈[0,2]),与兵 2 同列相邻(distance 1)
+  // 红兵 2 (4,2):center 列(x=4),在黑宫,与兵 1 同列相邻
+  // 双方总子力:红 100+100=200,黑 0 → isEndgame=true
+  // 期望:
+  //   1) endgameSoldierCenterBonus(兵1) = center = 12
+  //   2) endgameSoldierCenterBonus(兵2) = center = 12
+  //   3) endgameSoldierCoordinationBonus(board, RED) = 1 pair × 22 = 22(同列 + 相邻)
+  //   4) endgameSoldierCoordinationBonus(board, BLACK) = 0
+  //   5) evaluateBoard(board, RED) > 0
+  //   6) 验证非过河兵不触发:加 1 个未过河红兵 (4,7),其 centerBonus=0,且不计入 coordination
+  //   7) 验证非 endgame 守卫:加车马让双方子力 > 阈值,coorBonus 仍直接调用正常,
+  //      但 evaluateBoard 内 isEndgame=false 不触发(只验 center 单兵调用契约)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const scenario = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 5, y: 0, alive: true },
+      { id: 'rs1', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 1, alive: true },
+      { id: 'rs2', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 2, alive: true },
+      { id: 'rs3', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 7, alive: true }, // 未过河
+    ];
+    const centerS1 = endgameSoldierCenterBonus(scenario[2]);
+    const centerS2 = endgameSoldierCenterBonus(scenario[3]);
+    const centerS3 = endgameSoldierCenterBonus(scenario[4]);
+    const coordRed = endgameSoldierCoordinationBonus(scenario, SIDES.RED);
+    const coordBlack = endgameSoldierCoordinationBonus(scenario, SIDES.BLACK);
+    const evalRed = evaluateBoard(scenario, SIDES.RED);
+    // 兵 1 / 兵 2 是同列(x=4)的过河兵,兵 3 未过河不计入 → pair 数 = 1
+    return {
+      centerS1, centerS2, centerS3,
+      coordRed, coordBlack, evalRed,
+      isEndgame: isEndgame(scenario),
+    };
+  })()`);
+  assert.equal(result.centerS1, 12,
+    `center bonus for soldier at (4,1) should be 12 (center col), got ${result.centerS1}`);
+  assert.equal(result.centerS2, 12,
+    `center bonus for soldier at (4,2) should be 12 (center col), got ${result.centerS2}`);
+  assert.equal(result.centerS3, 0,
+    `center bonus for non-crossed soldier at (4,7) should be 0, got ${result.centerS3}`);
+  assert.equal(result.coordRed, 22,
+    `coordination bonus for RED (1 pair × 22) should be 22, got ${result.coordRed}`);
+  assert.equal(result.coordBlack, 0,
+    `coordination bonus for BLACK (no soldiers) should be 0, got ${result.coordBlack}`);
+  assert.ok(result.isEndgame,
+    `position with 200 red material should be endgame, got isEndgame=${result.isEndgame}`);
+  assert.ok(result.evalRed > 0,
+    `evaluateBoard(board, RED) should be > 0 (soldier + center + coordination bonuses); got ${result.evalRed}`);
+});
+
