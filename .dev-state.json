@@ -1094,9 +1094,9 @@
       "phase": 12,
       "title": "Tempo Bonus(走子方 +TEMPO_BONUS,经典评估精化)",
       "priority": "P0",
-      "status": "in_progress",
+      "status": "done",
       "estimated_min": 20,
-      "attempts": 0,
+      "attempts": 1,
       "description": "evaluateBoard 当前是纯静态对称评估,缺失经典 tempo(走子方优势)维度。中国象棋中先手是公认优势(类似国际象棋 ~20-40cp)。实现:(1) constants.js 加 TEMPO_BONUS=15(保守值,远低于兵 100);(2) evaluateBoard 加可选 side 参数(默认 null 保持向后兼容,不破坏初始对称测试);(3) side 传入时给 side 方 +TEMPO_BONUS,对方 -TEMPO_BONUS;(4) negamax + quiescence 3 个 evaluateBoard callsite 改为传入 side;(5) 新增测试验证 side=RED vs side=BLACK 评估差 = 2*TEMPO_BONUS。直接服务『看 5-7 步』(更精确评估 → TT 内深度搜索受益)+ 『中局战术组合能力』(主动方加成)。",
       "files": [
         "src/constants.js",
@@ -1110,7 +1110,9 @@
         "新增测试:相同局面 side=RED vs side=BLACK 差 = 2*TEMPO_BONUS",
         "现有初始对称测试仍 pass",
         "npm test 全过"
-      ]
+      ],
+      "completed_at": "2026-08-09T05:14:48.611826+08:00",
+      "commit_sha": "c2fd5f943e10b983e895b287e45f199b4d7ba77b"
     },
     {
       "id": 58,
@@ -1594,6 +1596,13 @@
       "action": "completed",
       "summary": "#56 Cannon Battery(叠炮)tactical eval: TACTIC_BONUS.cannonBattery=40; tacticBonus() 新增检测块(同方两炮同行/列 + 中间 0 子 + 方向轴对齐敌方高价值目标); 2 个回归测试(契约 + 6 种战术局面)。67/67 tests pass。",
       "commit_sha": "4277327"
+    },
+    {
+      "timestamp": "2026-08-09T05:14:48.611826+08:00",
+      "todo_id": 57,
+      "action": "completed",
+      "summary": "#57 Tempo Bonus:constants.js 加 TEMPO_BONUS=15(保守值,远低于兵 100);evaluateBoard 加可选 side 参数(默认 null 保持向后兼容,保护初始对称测试);side 传入时给走子方 +TEMPO_BONUS 对方 -TEMPO_BONUS;negamax + quiescence 3 个 callsite 改为传入 side;新增 2 个测试:常量契约 + side=RED/BLACK 差 = 2*TEMPO_BONUS + 不传 side 对称性。69/69 tests pass。Phase 12 启动,4 个 TODO(#57-#60),#57 done。",
+      "commit_sha": "c2fd5f943e10b983e895b287e45f199b4d7ba77b"
     }
   ],
   "rules": [
