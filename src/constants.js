@@ -67,6 +67,15 @@ const HISTORY_SATURATION_CAP = HISTORY_MAX_BONUS * 4;
 // 用 `(depth + OFFSET)^2` 让 depth=1 cutoff 累积 4,depth=5 累积 36,低深度 cutoff 也有可识别信号。
 // 直接服务 move ordering 质量 → LMR/PVS 准确性 → 搜索深度。
 const HISTORY_BONUS_DEPTH_OFFSET = 1;
+// === History Malus (#45) ===
+// 经典 Stockfish 技术:storeHistory 在 cutoff 时加 bonus,penalizeHistory 在 fail-low 时减 malus。
+// 对称设计会让大多数"既非 cutoff 也非明显失败"的中性走法归零 → ordering 失去区分度。
+// 因此 malus = bonus / FACTOR(FACTOR=2),让 malus 比 bonus 弱:仅"明显失败"的走法累积明显负值,
+// "中性"走法维持轻微正值或归零。直接服务 move ordering 质量 → PVS/LMR 准确性 → 搜索深度。
+// MIN_DEPTH=2:浅节点(depth=1)的 fail-low 信号噪声大(单 ply 战术结果),不应用 malus;
+// 从 depth=2 起应用,与 LMR_MIN_DEPTH=3 错开,LMR 处理 [3+],History Malus 处理 [2+]。
+const HISTORY_MALUS_FACTOR = 2;
+const HISTORY_MALUS_MIN_DEPTH = 2;
 const LMR_MIN_DEPTH = 3;
 const LMR_FULL_MOVE_COUNT = 3;
 const LMR_REDUCTION = 1;

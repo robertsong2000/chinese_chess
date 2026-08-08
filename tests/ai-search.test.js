@@ -1158,3 +1158,104 @@ test("#44 countermove heuristic: table store + ordering bonus", () => {
   assert.ok(result.bonusInRange,
     `COUNTERMOVE_BONUS should be in (HISTORY_MAX_BONUS, KILLER_BONUS_SECOND), got bonus=${result.bonus} histMax=${result.histMax} killer2nd=${result.killerSecond}`);
 });
+
+test("#45 history malus: constants contract + asymmetric penalty", () => {
+  // 契约:
+  // - HISTORY_MALUS_FACTOR >= 2:malus 比 bonus 弱(对称会抹平 ordering 信号)。
+  // - HISTORY_MALUS_MIN_DEPTH >= 2:浅节点(depth=1)的 fail-low 噪声大,不应用 malus。
+  // - penalizeHistory 减少值,floor 在 0(不让 history 变负,historyOrderingBonus 仅返回正值)。
+  // - malus 大小 = bonus / FACTOR(非对称设计:cutoff +bonus,fail-low -bonus/FACTOR)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const factorOk = HISTORY_MALUS_FACTOR >= 2;
+    const minDepthOk = HISTORY_MALUS_MIN_DEPTH >= 2;
+
+    // 起始 history = 0,penalizeHistory 应保持在 0(floor)
+    const h0 = createHistoryTable();
+    const move = { fromX: 1, fromY: 1, toX: 2, toY: 2 };
+    penalizeHistory(h0, move, 5);
+    const idx = (1 * 9 + 1) * HISTORY_BOARD_SQUARES + (2 * 9 + 2);
+    const flooredAtZero = h0[idx] === 0;
+
+    // 预 storeHistory 让 history 有值,再 penalizeHistory 验证减少
+    const h1 = createHistoryTable();
+    storeHistory(h1, move, 5);  // bonus = (5+1)^2 = 36
+    const beforePenalty = h1[idx];
+    penalizeHistory(h1, move, 5);  // malus = 36 / 2 = 18
+    const afterPenalty = h1[idx];
+    const reducedBy = beforePenalty - afterPenalty;
+
+    // 对比:同样 depth=5,storeHistory 加 36,penalizeHistory 减 18(对称约束)
+    const h2 = createHistoryTable();
+    storeHistory(h2, move, 5);
+    const storeAmount = h2[idx];
+    const h3 = createHistoryTable();
+    penalizeHistory(h3, move, 5);
+    const malusFromZero = h3[idx]; // 应为 0 (floor)
+    const asymmetry = storeAmount > 0 && malusFromZero === 0;
+
+    return {
+      factor: HISTORY_MALUS_FACTOR,
+      minDepth: HISTORY_MALUS_MIN_DEPTH,
+      factorOk,
+      minDepthOk,
+      flooredAtZero,
+      beforePenalty,
+      afterPenalty,
+      reducedBy,
+      storeAmount,
+      malusFromZero,
+      asymmetry,
+    };
+  })()`);
+  assert.ok(result.factorOk,
+    `HISTORY_MALUS_FACTOR should be >= 2 (asymmetric malus < bonus), got ${result.factor}`);
+  assert.ok(result.minDepthOk,
+    `HISTORY_MALUS_MIN_DEPTH should be >= 2, got ${result.minDepth}`);
+  assert.ok(result.flooredAtZero,
+    `penalizeHistory on zero history should floor at 0, got ${result.flooredAtZero}`);
+  assert.ok(result.reducedBy > 0 && result.reducedBy < result.beforePenalty,
+    `penalizeHistory should reduce value but not below 0: before=${result.beforePenalty} after=${result.afterPenalty} reducedBy=${result.reducedBy}`);
+  // Asymmetric: store (bonus) > malus (penalty) for the same depth
+  // storeAmount = (depth+1)^2, reducedBy = floor((depth+1)^2 / FACTOR)
+  // malus * FACTOR should be <= bonus + rounding (asymmetric design)
+  assert.ok(result.reducedBy * 2 <= result.storeAmount + 1,
+    `malus * FACTOR should be <= bonus + rounding (asymmetric design), got reducedBy=${result.reducedBy} factor=2 storeAmount=${result.storeAmount}`);
+});
+
+test("#45 history malus: tactical scenario verification", () => {
+  // 战术验证:在 hard AI 能正解的 1-ply 战术局面(马吃无保护车,镜像自 ai-benchmark.js T1)
+  // 上验证加入 history malus 后,正解走法仍能找到。
+  // 直接服务"完全不送子":history malus 让"曾失败"的走法下沉,理论上不动正向战术。
+  // 设计:红将在 (3,9) 错开列避免飞将直接吃将;黑马 (6,3)→(5,5) 吃无保护红车。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    state = createGame(SIDES.RED, "hard");
+    state.status = "playing";
+    state.board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 5, y: 5, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 6, y: 3, alive: true },
+    ];
+    state.currentSide = SIDES.BLACK;
+    state.snapshots = [];
+    state.moveHistory = [];
+
+    const realNow = performance.now.bind(performance);
+    const timeScale = 1100 / 300;
+    performance.now = function () { return realNow() * timeScale; };
+    let move = null;
+    try { move = chooseAIMove(); } finally { performance.now = realNow; }
+
+    return {
+      found: !!move,
+      pieceType: move && move.pieceType,
+      toX: move && move.toX,
+      toY: move && move.toY,
+      isCorrect: move && move.pieceType === TYPES.HORSE && move.toX === 5 && move.toY === 5,
+    };
+  })()`);
+  assert.ok(result.isCorrect,
+    `hard AI should find horse capture of unprotected chariot (6,3)→(5,5), got piece=${result.pieceType} to=(${result.toX},${result.toY})`);
+});

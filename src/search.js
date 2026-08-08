@@ -662,6 +662,23 @@ function storeHistory(history, move, depth) {
   history[idx] = next;
 }
 
+// History Malus (#45): fail-low 走法减分。
+// 与 storeHistory 互补:cutoff 加 bonus,fail-low 减 malus,让"明显失败"走法在 future ordering 中下沉。
+// malus = bonus / FACTOR,弱于 bonus,避免中性走法累积负值(对称会抹平 ordering 信号)。
+// Floor 在 0(不让 history 变负,因为 historyOrderingBonus 仅返回正值)。
+function penalizeHistory(history, move, depth) {
+  if (!history) return;
+  const from = squareIndex(move.fromX, move.fromY);
+  const to = squareIndex(move.toX, move.toY);
+  const malus = depth > 0
+    ? Math.floor((depth + HISTORY_BONUS_DEPTH_OFFSET) * (depth + HISTORY_BONUS_DEPTH_OFFSET) / HISTORY_MALUS_FACTOR)
+    : 0;
+  if (malus <= 0) return;
+  const idx = from * HISTORY_BOARD_SQUARES + to;
+  const next = history[idx] - malus;
+  history[idx] = next > 0 ? next : 0;
+}
+
 function boardKey(board, side, depth) {
   return `${side}:${depth}:${canonicalBoardKey(board)}`;
 }
@@ -863,6 +880,18 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
       if (score > alpha && score < beta) {
         score = -negamax(childBoard, opposite(side), extDepth, -beta, -alpha, aiSide, tt, deadline, ply + 1, killers, history, true, childExt, true, counterMoves, move);
       }
+    }
+    // History Malus (#45):非首走法(首走法常是 TT/killer,失败不宜惩罚)+ 非 capture
+    // + 深度足够(浅节点 fail-low 噪声大)+ score ≤ origAlpha(真正 fail-low,未改进 alpha)→ 减 history。
+    // 与 storeHistory(下方 alpha>=beta 路径)互补:cutoff 走法 +bonus,fail-low 走法 -malus。
+    if (
+      i >= 1
+      && history
+      && !isTactical
+      && depth >= HISTORY_MALUS_MIN_DEPTH
+      && score <= origAlpha
+    ) {
+      penalizeHistory(history, move, depth);
     }
     if (score > best) {
       best = score;
