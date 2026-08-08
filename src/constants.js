@@ -132,6 +132,19 @@ const RAZORING_MARGIN = 300;
 const FUTILITY_DEPTH = 1;
 const FUTILITY_MARGIN = 300;
 
+// === Internal Iterative Deepening (IID) ===
+// 经典启发式:在内部节点(ply > 0)如果 TT 没给 best move(新局面或仅存 null-move cutoff 记录),
+// move ordering 会退化(TT_BONUS 缺失 → 仅靠 killer/history,未搜过的位置上命中率低)。
+// 先做 depth - IID_REDUCTION 的 pre-search,populate TT 与 killer/history;预搜后 TT 应有
+// bestMoveKey 供当前深度 ordering 使用。直接服务"看 5-7 步":避免大局面下 ordering 失效导致
+// 搜索深度退化(LMR/PVS 都依赖 ordering 质量)。
+//
+// 触发条件:depth >= IID_MIN_DEPTH(>=3,浅节点收益小)+ ply > 0(根节点由 chooseAIMove 的
+// iterative deepening 外层覆盖)+ 无 TT best move + iidAllowed(防止递归 IID 爆炸)。
+// Pre-search 传 iidAllowed=false,保证每个 negamax 调用最多触发一次 IID。
+const IID_MIN_DEPTH = 3;
+const IID_REDUCTION = 2;
+
 // === Time management ===
 // 基准思考时间(benchmark 用 timeScale 包装 performance.now,此处维持原值以确保 wall clock 可控)。
 // hard 通过 allocateTimeFactor 动态调整:残局/受困多想,开局/复杂少想,关键局面延伸深度。

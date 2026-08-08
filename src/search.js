@@ -671,7 +671,7 @@ function ttStore(tt, hash, depth, score, flag, bestMoveKey) {
   tt.set(hash, { depth, score, flag, bestMoveKey });
 }
 
-function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = Infinity, ply = 0, killers = null, history = null, allowNull = true, extensionsInLine = 0) {
+function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = Infinity, ply = 0, killers = null, history = null, allowNull = true, extensionsInLine = 0, iidAllowed = true) {
   if (performance.now() > deadline) return evaluateBoard(board, aiSide) * (side === aiSide ? 1 : -1);
   const inCheck = isInCheck(board, side);
   const hash = tt ? computeZobrist(board, side) : 0;
@@ -681,6 +681,20 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     const probed = ttProbe(tt, hash, depth, alpha, beta);
     if (typeof probed === "number") return probed;
     if (probed) ttBestMoveKey = probed.bestMoveKey;
+  }
+  // === Internal Iterative Deepening (IID) ===
+  // 无 TT best move + 深层 + 内部节点 → 做 reduced-depth pre-search populate TT,
+  // 拿到 bestMoveKey 提升当前深度 ordering 质量。pre-search 传 iidAllowed=false 防递归。
+  // 仅 ply > 0 做:根节点的 IID 由 chooseAIMove 的外层 iterative deepening 覆盖。
+  if (tt && iidAllowed && !ttBestMoveKey && depth >= IID_MIN_DEPTH && ply > 0) {
+    negamax(
+      board, side, depth - IID_REDUCTION, alpha, beta, aiSide, tt, deadline,
+      ply, killers, history, allowNull, extensionsInLine, false,
+    );
+    const reprobe = ttProbe(tt, hash, depth, alpha, beta);
+    if (reprobe && typeof reprobe !== "number" && reprobe.bestMoveKey) {
+      ttBestMoveKey = reprobe.bestMoveKey;
+    }
   }
   if (depth === 0) {
     const moves = allLegalMoves(board, side);

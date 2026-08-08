@@ -427,3 +427,58 @@ test("futility pruning + razoring: hard AI still takes a free horse in 1-ply tac
     `black chariot should take the free horse at (1,9); got piece=${result.pieceId} to=(${result.toX},${result.toY})`,
   );
 });
+
+test("IID constants are configured for interior-node move ordering recovery", () => {
+  // 契约:
+  // - IID_MIN_DEPTH = 3(经典做法:浅节点 pre-search 收益小,深层做才有意义);
+  // - IID_REDUCTION = 2(标准值:pre-search 用 depth-2,够深以拿到有用 best move,够浅以省时)。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    minDepth: IID_MIN_DEPTH,
+    reduction: IID_REDUCTION,
+  }))()`);
+  assert.equal(result.minDepth, 3, "IID_MIN_DEPTH should be 3");
+  assert.equal(result.reduction, 2, "IID_REDUCTION should be 2");
+});
+
+test("IID: hard AI finds the free chariot capture from an unseen mid-game position", () => {
+  // IID 战术合理性回归:IID 在内部节点 pre-search,populate TT 提升后续 ordering。
+  // 风险:pre-search 路径污染 TT / ordering 噪声导致 bestMove 偏离战术正着。
+  // 验证:即便启用 IID,hard AI 在"中盘未见局面下的 1-ply 免费吃车"仍应直接选吃车。
+  // 局面:红车 (4,4) 是死子;黑马 (5,6) 走日可吃车 (4,4)。其他子力部署让 TT 几乎肯定未缓存此局面。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 4, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'ra', side: SIDES.RED, type: TYPES.ADVISOR, x: 3, y: 9, alive: true },
+      { id: 'be', side: SIDES.BLACK, type: TYPES.ELEPHANT, x: 2, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 4, y: 4, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 5, y: 6, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CANNON, x: 7, y: 2, alive: true },
+    ];
+    state = createGame(SIDES.RED, "hard");
+    state.status = "playing";
+    state.currentSide = SIDES.BLACK;
+    state.board = board;
+    state.snapshots = [];
+    state.moveHistory = [];
+    const move = chooseAIMove();
+    const legal = allLegalMoves(board, SIDES.BLACK).some(
+      (m) => m.pieceId === move.pieceId && m.toX === move.toX && m.toY === move.toY,
+    );
+    return {
+      ateChariot: Boolean(move && move.pieceId === 'bh' && move.toX === 4 && move.toY === 4),
+      isLegal: legal,
+      pieceId: move && move.pieceId,
+      toX: move && move.toX,
+      toY: move && move.toY,
+    };
+  })()`);
+  assert.equal(result.isLegal, true, "returned move must be legal");
+  assert.equal(
+    result.ateChariot,
+    true,
+    `black horse should take the free chariot at (4,4); got piece=${result.pieceId} to=(${result.toX},${result.toY})`,
+  );
+});
