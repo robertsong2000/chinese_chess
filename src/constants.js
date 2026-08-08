@@ -557,6 +557,20 @@ const PINNED_MOBILITY_PENALTY = {
 // 无子 → 红 +30;黑两车同行(y=0)中间无子 → 黑 +30;双向相减 = 0。
 const CONNECTED_CHARIOTS_BONUS = 30;
 
+// #62 Hanging Piece Penalty(静态送子检测):side 方任一非将子 P 满足
+//   (a) 敌方存在攻击 P 的攻击方 A,且 value[A] <= value[P](攻击方不亏)
+//   (b) 我方不存在攻击 P 的防守方 D,value[D] <= value[A](无廉价回吃)
+// 则 P 处于"送子"状态,扣 fraction * value[P]。
+// 直接服务『完全不送子』。补强 quiescence SEE 在非 capture 序列上的盲区:
+// quiescence 仅在 capture 序列中跑 SEE,对"静止态送子"(轮到对方走,对方直接吃)
+// 不主动检测,导致评估高估悬子。本函数在 evaluateBoard 中静态扫描所有悬子。
+// 取值保守:fraction=0.25(单车扣 225,小于其价值 900,不鼓励"为避悬而兑子")。
+// 对称不变量:初始局面无攻击关系 → 双方 penalty=0。
+const HANGING_PIECE_PENALTY = {
+  enabled: true,
+  fraction: 0.25, // 悬子扣自身价值的 25%(单车 -225,单马 -100,过河兵 -25)
+};
+
 const POSITION_BONUS = {
   general: [
     [0, 0, 0, 8, 12, 8, 0, 0, 0],

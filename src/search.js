@@ -1301,6 +1301,9 @@ function evaluateBoard(board, aiSide, side = null) {
   // #61 Connected Chariots(双车联动):同方两车同列/行 + 中间无子 → 加分
   score += chariotCoordinationBonus(board, aiSide);
   score -= chariotCoordinationBonus(board, opposite(aiSide));
+  // #62 Hanging Piece Penalty(静态送子检测):非将子被廉价攻击且无廉价回吃 → 扣分
+  score += hangingPiecePenalty(board, aiSide);
+  score -= hangingPiecePenalty(board, opposite(aiSide));
   // #51 残局双兵过河协同(必胜结构):仅 endgame 阶段加分
   if (endgame) {
     score += endgameSoldierCoordinationBonus(board, aiSide);
@@ -1883,6 +1886,56 @@ function chariotCoordinationBonus(board, side) {
     }
   }
   return bonus;
+}
+
+// #62 Hanging Piece Penalty(静态送子检测):返回 side 方悬子的总惩罚(负数)。
+// 对 side 方每个非将子 P,检查:
+//   (a) 是否存在敌方攻击 P 的攻击方 A,value[A] <= value[P](攻击方不亏)
+//   (b) 是否存在友方攻击 P 的防守方 D,value[D] <= value[A](廉价回吃)
+//   若 (a) 成立且 (b) 不成立 → P 悬,扣 fraction * value[P]。
+// 复杂度:O(N²) over livePieces,N ≤ 32 → 最坏 ~1024 次 pieceAttacksSquare 调用,
+// 与 chariotCoordinationBonus 同量级。evaluateBoard 每节点调用一次,可接受。
+// 对称不变量:初始局面无攻击关系 → 双方 penalty = 0,双向相减 = 0。
+function hangingPiecePenalty(board, side) {
+  if (!HANGING_PIECE_PENALTY || !HANGING_PIECE_PENALTY.enabled) return 0;
+  const enemy = opposite(side);
+  const mines = livePieces(board).filter(
+    (p) => p.side === side && p.type !== TYPES.GENERAL,
+  );
+  if (mines.length === 0) return 0;
+  const allLive = livePieces(board);
+  let penalty = 0;
+  for (const p of mines) {
+    const pVal = PIECE_VALUE[p.type];
+    // (a) 找最廉价敌方攻击方
+    let cheapestAttacker = null;
+    for (const e of allLive) {
+      if (e.side !== enemy) continue;
+      if (e.type === TYPES.GENERAL) continue;
+      if (!pieceAttacksSquare(board, e, p.x, p.y)) continue;
+      if (!cheapestAttacker || PIECE_VALUE[e.type] < PIECE_VALUE[cheapestAttacker.type]) {
+        cheapestAttacker = e;
+      }
+    }
+    if (!cheapestAttacker) continue;
+    const attVal = PIECE_VALUE[cheapestAttacker.type];
+    if (attVal > pVal) continue; // 攻击亏本,不算悬
+    // (b) 找廉价防守方(value[D] <= attVal,排除 P 自身)
+    let adequateDefender = false;
+    for (const d of allLive) {
+      if (d.side !== side) continue;
+      if (d.id === p.id) continue;
+      if (d.type === TYPES.GENERAL) continue;
+      if (!pieceAttacksSquare(board, d, p.x, p.y)) continue;
+      if (PIECE_VALUE[d.type] <= attVal) {
+        adequateDefender = true;
+        break;
+      }
+    }
+    if (adequateDefender) continue;
+    penalty += pVal * HANGING_PIECE_PENALTY.fraction;
+  }
+  return -penalty;
 }
 
 // #58 Center Cannon Opening Bonus:开局阶段 side 方有炮在中线原位行时加分。

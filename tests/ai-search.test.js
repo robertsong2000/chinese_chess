@@ -2303,6 +2303,90 @@ test("#59 evaluateBoard: pinned horse contributes zero mobility", () => {
   );
 });
 
+test("#62 hangingPiecePenalty: constants configured for static hanging-piece detection", () => {
+  // 契约:HANGING_PIECE_PENALTY 默认 enabled,fraction ∈ [0, 0.5]。
+  // 取值保守(fraction ≤ 0.5 防止悬子惩罚超过自身价值,鼓励错误兑换)。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    enabled: HANGING_PIECE_PENALTY.enabled,
+    fraction: HANGING_PIECE_PENALTY.fraction,
+  }))()`);
+  assert.equal(result.enabled, true, "HANGING_PIECE_PENALTY should be enabled by default");
+  assert.ok(result.fraction > 0 && result.fraction <= 0.5,
+    `fraction should be in (0, 0.5], got ${result.fraction}`);
+});
+
+test("#62 hangingPiecePenalty: undefended chariot attacked by enemy horse gets penalty", () => {
+  // 战术结构:红马 (5,7) 攻击黑车 (4,5)。黑车无任何友方防守。
+  // 黑车 (4,5) 比 (5,7) 红马贵(value 900 vs 400),红马廉价攻击 → 黑车悬。
+  // pieceAttacksSquare:house at (5,7) -> (4,5): dx=-1, dy=-2, absX=1, absY=2 →
+  //   leg at (5, 7 + sign(-2)) = (5,6),empty → attacks.
+  // 期望:hangingPiecePenalty(board, BLACK) < 0(黑车悬,扣 fraction * 900 = 225)。
+  //       hangingPiecePenalty(board, RED) === 0(红马不被任何黑方棋子攻击)。
+  // 注:为避免与 flyingGeneral 干扰,把红将放在 (3,9),黑将放在 (0,0)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 0, y: 0, alive: true },
+      { id: 'rh', side: SIDES.RED, type: TYPES.HORSE, x: 5, y: 7, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 4, y: 5, alive: true },
+    ];
+    return {
+      blackPenalty: hangingPiecePenalty(board, SIDES.BLACK),
+      redPenalty: hangingPiecePenalty(board, SIDES.RED),
+      expectedChariotPenalty: PIECE_VALUE[TYPES.CHARIOT] * HANGING_PIECE_PENALTY.fraction,
+    };
+  })()`);
+  // 黑车悬:penalty = -(900 * 0.25) = -225
+  assert.ok(result.blackPenalty < 0,
+    `hangingPiecePenalty(BLACK) should be < 0 (chariot hangs); got ${result.blackPenalty}`);
+  assert.ok(Math.abs(result.blackPenalty + result.expectedChariotPenalty) < 1,
+    `hangingPiecePenalty(BLACK) ≈ -${result.expectedChariotPenalty}; got ${result.blackPenalty}`);
+  // 红方无悬子(红马不被任何黑方棋子攻击)
+  assert.equal(result.redPenalty, 0,
+    `hangingPiecePenalty(RED) should be 0 (no red piece hangs); got ${result.redPenalty}`);
+});
+
+test("#62 hangingPiecePenalty: defended piece does not trigger penalty", () => {
+  // 战术结构:红马 (5,7) 攻击黑车 (4,5)。黑马 (5,3) 在 (4,5) 防守(同价值,廉价回吃)。
+  // 黑马 (5,3) attacks (4,5): dx=-1, dy=2, absX=1, absY=2, leg at (5,4),empty → attacks.
+  // value[HORSE]=400 ≤ value[HORSE]=400 → 廉价防守 → 黑车不算悬。
+  // 期望:hangingPiecePenalty(board, BLACK) === 0。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 0, y: 0, alive: true },
+      { id: 'rh', side: SIDES.RED, type: TYPES.HORSE, x: 5, y: 7, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 4, y: 5, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 5, y: 3, alive: true },
+    ];
+    return {
+      blackPenalty: hangingPiecePenalty(board, SIDES.BLACK),
+    };
+  })()`);
+  assert.equal(result.blackPenalty, 0,
+    `hangingPiecePenalty(BLACK) should be 0 (chariot is defended by friendly horse); got ${result.blackPenalty}`);
+});
+
+test("#62 hangingPiecePenalty: symmetric on initial board (no attacks → 0 penalty)", () => {
+  // 对称不变量:初始局面无跨方攻击关系 → 双方 hangingPiecePenalty = 0。
+  // 防止评估精化破坏对称性,导致 self-play 先手优势被扭曲。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = initialPieces();
+    return {
+      redPenalty: hangingPiecePenalty(board, SIDES.RED),
+      blackPenalty: hangingPiecePenalty(board, SIDES.BLACK),
+    };
+  })()`);
+  assert.equal(result.redPenalty, 0,
+    `hangingPiecePenalty(RED) on initial board should be 0; got ${result.redPenalty}`);
+  assert.equal(result.blackPenalty, 0,
+    `hangingPiecePenalty(BLACK) on initial board should be 0; got ${result.blackPenalty}`);
+});
+
 test("#60 self-play regression: hard does not lose to normal across a 4-game match", () => {
   // Phase 5/7 曾因评估调整(原 ENDGAME_PATTERN_BONUS 500/500)引发 self-play 退化:
   // hard 0/4 输给 normal。本测试为 Phase 12 评估精化(Tempo / Center Cannon / Pinned Mobility)
