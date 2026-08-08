@@ -592,9 +592,11 @@
         "src/search.js"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 20,
-      "attempts": 0
+      "attempts": 1,
+      "completed_at": "2026-08-08T13:15:00+08:00",
+      "commit_sha": "b950271"
     },
     {
       "id": 33,
@@ -891,6 +893,13 @@
       "action": "completed",
       "summary": "Futility Pruning + Razoring:razor 完全禁用(PVS zero-window probe 路径 alpha=8000 触发 quiescence 偏低导致 bestMove 错过,任何 margin 都 fail);futility margin=300 + window check(非 PVS zero-window 才启用)。新增 5 常量 + standPat cache + razor 骨架 + futility flag + move loop skip + 2 个回归测试。25/25 pass,战术吃马局面验证通过。benchmark hardWinRate=0.5 但 git stash 验证 baseline(#30)已退化到 0.5,#31 未引入额外退化(节点数下降 5-10% 换取)。",
       "commit_sha": "4309169"
+    },
+    {
+      "timestamp": "2026-08-08T13:15:00+08:00",
+      "todo_id": 32,
+      "action": "completed",
+      "summary": "IID:negamax 加 iidAllowed 参数,ply>0 + 无 TT move + depth>=3 时做 depth-2 pre-search populate TT,re-probe 拿 bestMoveKey 提升 ordering。pre-search 传 iidAllowed=false 防递归。2 个回归测试(常量契约 + 战术局面)。27/27 pass。",
+      "commit_sha": "b950271"
     }
   ],
   "rules": [
@@ -902,5 +911,5 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "下次运行应做 id=32 Internal Iterative Deepening(无 TT move 时预探查)。预估 20 分钟。后续 phase 4 待办:#33 战术模式检测、#34 实用残局、#35 tactics benchmark。注意:baseline benchmark 已退化到 hardWinRate=0.5(可能是 #29/#30 引起),后续可加 TODO 修复 benchmark 退化。"
+  "next_run_hint": "下次运行应做 id=33 战术模式检测(pin/fork/discovered attack)。预估 30 分钟。后续 phase 4 待办:#34 实用残局、#35 tactics benchmark。注意:baseline benchmark 仍退化到 hardWinRate=0.5(#29/#30 引起),#33 完成后可加新 TODO 修复 benchmark 退化。"
 }
