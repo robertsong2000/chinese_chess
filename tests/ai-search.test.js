@@ -1346,3 +1346,107 @@ test("#47 Verified NMP: endgame tactic — hard AI still finds chariot capture d
   assert.ok(result.isCorrect,
     `hard AI in endgame (verified NMP territory) should capture free enemy chariot (5,5)→(5,2), got piece=${result.pieceType} from=(${result.fromX},${result.fromY}) to=(${result.toX},${result.toY})`);
 });
+
+test("#48 Threat Extension: constants contract + extension budget integration", () => {
+  // 契约:
+  // - THREAT_EXTENSION_ENABLED = true(默认开启,服务棋力 2200)
+  // - THREAT_EXTENSION_MIN_DEPTH >= NULL_MOVE_MIN_DEPTH:null move 必须已能运行(否则无 nullScore 信号)
+  // - THREAT_EXTENSION_MIN_DEPTH >= NULL_MOVE_VERIFY_MIN_DEPTH:与 verify 同档,均为深层 null move 复核类
+  // - THREAT_MARGIN > 0:必须为正,=0 时 nullScore < beta 即触发,过于激进
+  // - THREAT_EXTENSION_PLY = 1:经典取值,+2 会让搜索树爆炸
+  // - MAX_THREAT_EXTENSIONS_PER_LINE >= 1:每条线至少允许 1 次 threat ext
+  // - 总延伸上限 = MAX_CHECK(2) + MAX_SINGULAR(1) + MAX_THREAT(1) = 4:防止延伸爆炸
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const enabled = THREAT_EXTENSION_ENABLED === true;
+    const minDepthGeNullMin = THREAT_EXTENSION_MIN_DEPTH >= NULL_MOVE_MIN_DEPTH;
+    const minDepthGeVerify = THREAT_EXTENSION_MIN_DEPTH >= NULL_MOVE_VERIFY_MIN_DEPTH;
+    const marginPositive = THREAT_MARGIN > 0;
+    const plyOne = THREAT_EXTENSION_PLY === 1;
+    const maxPerLineGE1 = MAX_THREAT_EXTENSIONS_PER_LINE >= 1;
+    const totalCap = MAX_CHECK_EXTENSIONS_PER_LINE + MAX_SINGULAR_EXTENSIONS_PER_LINE + MAX_THREAT_EXTENSIONS_PER_LINE;
+    const capReasonable = totalCap >= 3 && totalCap <= 6;
+    return {
+      enabled,
+      minDepth: THREAT_EXTENSION_MIN_DEPTH,
+      nullMin: NULL_MOVE_MIN_DEPTH,
+      verifyMin: NULL_MOVE_VERIFY_MIN_DEPTH,
+      margin: THREAT_MARGIN,
+      ply: THREAT_EXTENSION_PLY,
+      maxPerLine: MAX_THREAT_EXTENSIONS_PER_LINE,
+      minDepthGeNullMin,
+      minDepthGeVerify,
+      marginPositive,
+      plyOne,
+      maxPerLineGE1,
+      totalCap,
+      capReasonable,
+    };
+  })()`);
+  assert.ok(result.enabled,
+    `THREAT_EXTENSION_ENABLED should be true (default on for chess strength), got ${result.enabled}`);
+  assert.ok(result.minDepthGeNullMin,
+    `THREAT_EXTENSION_MIN_DEPTH (${result.minDepth}) should be >= NULL_MOVE_MIN_DEPTH (${result.nullMin}) so nullScore signal exists`);
+  assert.ok(result.minDepthGeVerify,
+    `THREAT_EXTENSION_MIN_DEPTH (${result.minDepth}) should be >= NULL_MOVE_VERIFY_MIN_DEPTH (${result.verifyMin}) — both are deep null-move re-checks`);
+  assert.ok(result.marginPositive,
+    `THREAT_MARGIN (${result.margin}) should be > 0 to avoid spurious triggers on nullScore ≈ beta`);
+  assert.ok(result.plyOne,
+    `THREAT_EXTENSION_PLY should be 1 (classic value; +2 explodes search), got ${result.ply}`);
+  assert.ok(result.maxPerLineGE1,
+    `MAX_THREAT_EXTENSIONS_PER_LINE should be >= 1, got ${result.maxPerLine}`);
+  assert.ok(result.capReasonable,
+    `Total extension cap (check+singular+threat = ${result.totalCap}) should be in [3,6] to bound search explosion`);
+});
+
+test("#48 Threat Extension: hard AI defends hanging high-value piece under multi-piece pressure", () => {
+  // 战术验证:null move 在该局面下应该 fail-low(对手有真实威胁 — 黑车 + 黑马都瞄准红车),
+  // threat extension 触发后,hard AI 必须找到正确防御走法(吃掉威胁源黑马,而非被动逃跑)。
+  // 直接服务"完全不送子":威胁下多看 1 ply,识别"反吃威胁源"比"逃跑"更优。
+  //
+  // 局面:红将在 (3,9),黑将在 (4,0)(错开列避免飞将)
+  // 红车 (5,5) 无保护;黑车 (5,2) 同列瞄准红车;黑马 (6,3) 也瞄准红车 (5,5)
+  // 红方最佳:车 (5,5) 吃马 (6,3)? 不行 — 红车走 (5,5)→(6,5) 然后被马吃? 马在 (6,3) 攻击 (5,5)/(7,5)/(4,4)/(4,2)/(8,4)/(8,2)/(7,1)/(5,1),不攻击 (6,5)。
+  // 等等,马 (6,3) 的攻击点是 (4,2)/(4,4)/(5,1)/(5,5)/(7,1)/(7,5)/(8,2)/(8,4)。马瞄准红车 (5,5) ✓。
+  // 红车 (5,5) 可走:(5,5)→(5,2) 吃黑车(file 5 上 (5,5)→(5,2) 路径 (5,4)/(5,3) 必须无子;本测试无子,可走)。
+  // 红车 (5,5)→(5,2) 后,黑车被吃,黑马 (6,3) 仍瞄准 (5,5) 但红车已离开,红车在 (5,2) 安全吗?
+  // 黑马 (6,3) 攻击 (5,1)/(5,5)/(4,2)/(4,4)/(7,1)/(7,5)/(8,2)/(8,4),不含 (5,2),所以 (5,2) 安全 ✓。
+  // 黑将 (4,0) 不在 file 5,不能吃 (5,2)。所以红车 (5,5)→(5,2) 吃黑车是净赢一车。
+  //
+  // 验收:hard AI 必须找到 (5,5)→(5,2) 吃黑车。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    state = createGame(SIDES.RED, "hard");
+    state.status = "playing";
+    state.board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 5, y: 5, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 5, y: 2, alive: true },
+      { id: 'bh', side: SIDES.BLACK, type: TYPES.HORSE, x: 6, y: 3, alive: true },
+    ];
+    state.currentSide = SIDES.RED;
+    state.snapshots = [];
+    state.moveHistory = [];
+
+    const realNow = performance.now.bind(performance);
+    const timeScale = 1100 / 300;
+    performance.now = function () { return realNow() * timeScale; };
+    let move = null;
+    try { move = chooseAIMove(); } finally { performance.now = realNow; }
+
+    return {
+      found: !!move,
+      pieceType: move && move.pieceType,
+      fromX: move && move.fromX,
+      fromY: move && move.fromY,
+      toX: move && move.toX,
+      toY: move && move.toY,
+      isCorrect: move && move.pieceType === TYPES.CHARIOT
+        && move.fromX === 5 && move.fromY === 5
+        && move.toX === 5 && move.toY === 2,
+    };
+  })()`);
+  assert.ok(result.isCorrect,
+    `hard AI under multi-piece threat should capture enemy chariot (5,5)→(5,2) (clean win), got piece=${result.pieceType} from=(${result.fromX},${result.fromY}) to=(${result.toX},${result.toY})`);
+});

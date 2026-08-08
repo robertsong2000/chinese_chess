@@ -767,6 +767,10 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     }
     return quiescence(board, side, alpha, beta, aiSide, QUIESCENCE_DEPTH, deadline, moves);
   }
+  // === Threat Extension (#48) detection ===
+  // 在 null move block 内捕获 nullScore,若 < beta - THREAT_MARGIN,设置 underThreat=true,
+  // 主搜索 move loop 内对首走法 +1 ply。详见 constants.js THREAT_EXTENSION_* 注释。
+  let underThreat = false;
   if (allowNull && depth >= NULL_MOVE_MIN_DEPTH && !inCheck && beta < Infinity && beta > -Infinity) {
     const nullScore = -negamax(board, opposite(side), depth - 1 - NULL_MOVE_REDUCTION, -beta, -beta + 1, aiSide, tt, deadline, ply + 1, killers, history, false, extensionsInLine, true, counterMoves, null);
     if (nullScore >= beta) {
@@ -785,6 +789,13 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
         if (tt) ttStore(tt, hash, depth, beta, TT_FLAG_LOWER, null);
         return beta;
       }
+    } else if (
+      THREAT_EXTENSION_ENABLED
+      && depth >= THREAT_EXTENSION_MIN_DEPTH
+      && nullScore < beta - THREAT_MARGIN
+      && extensionsInLine < MAX_CHECK_EXTENSIONS_PER_LINE + MAX_SINGULAR_EXTENSIONS_PER_LINE + MAX_THREAT_EXTENSIONS_PER_LINE
+    ) {
+      underThreat = true;
     }
   }
   const moves = allLegalMoves(board, side);
@@ -915,8 +926,18 @@ function negamax(board, side, depth, alpha, beta, aiSide, tt = null, deadline = 
     const isSingular = singularMoveKey !== null
       && killerKey(move) === singularMoveKey
       && extensionsInLine < MAX_CHECK_EXTENSIONS_PER_LINE + MAX_SINGULAR_EXTENSIONS_PER_LINE;
-    const extDepth = (givesCheck ? depth - 1 + CHECK_EXTENSION_PLY : depth - 1) + (isSingular ? 1 : 0);
-    const childExt = (givesCheck ? extensionsInLine + 1 : extensionsInLine) + (isSingular ? 1 : 0);
+    // #48 Threat extension:null move search 显示对手有真实威胁时,首走法 +1 ply。
+    // 仅 i=0 触发(走法排序后首位 = TT/killer,是最值得延伸的"最佳候选防御");
+    // 不限 isTactical/givesCheck:防御性走法本身常是 quiet move,extension 帮助看到更深战术后果。
+    const isThreatExt = underThreat
+      && i === 0
+      && extensionsInLine < MAX_CHECK_EXTENSIONS_PER_LINE + MAX_SINGULAR_EXTENSIONS_PER_LINE + MAX_THREAT_EXTENSIONS_PER_LINE;
+    const extDepth = (givesCheck ? depth - 1 + CHECK_EXTENSION_PLY : depth - 1)
+      + (isSingular ? 1 : 0)
+      + (isThreatExt ? THREAT_EXTENSION_PLY : 0);
+    const childExt = (givesCheck ? extensionsInLine + 1 : extensionsInLine)
+      + (isSingular ? 1 : 0)
+      + (isThreatExt ? 1 : 0);
     // Futility pruning:i>=1(保留首走法确保 bestMove 非空)+ futile 节点 + quiet 非 check 走法 → 跳过。
     // capture/check 走法仍搜索,因为它们是战术性强走,有改 alpha 的可能。
     if (i >= 1 && futilityPrunable && !isTactical && !givesCheck) {

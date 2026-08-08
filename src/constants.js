@@ -266,6 +266,36 @@ const SINGULAR_MARGIN = 60;
 const SINGULAR_REDUCTION = 2;
 const MAX_SINGULAR_EXTENSIONS_PER_LINE = 1;
 
+// === Threat Extension (#48) ===
+// 经典 Stockfish 选择性延伸:null move search 失败(nullScore < beta - MARGIN)时,
+// 说明对手有真实威胁 — 即使我们让一步,对手的最佳回应仍能把分数压到 beta 之下。
+// 主搜索中的首走法(走法排序后通常是最优的 TT/killer)给 +1 ply extension,
+// 帮助找到防御性走法 / refutation,直接服务"看 5-7 步"+ 守住一级棋士。
+//
+// 设计要点:
+//   - 仅在 null move 已运行(allowNull + depth>=NULL_MOVE_MIN_DEPTH + !inCheck)且
+//     Verified NMP 未确认 cutoff 的 fall-through 路径上检测,语义清晰。
+//   - THREAT_MIN_DEPTH=5:浅节点 null move 信号噪声大,且 extension overhead 不划算。
+//     与 NULL_MOVE_VERIFY_MIN_DEPTH=5 对齐 — threat ext 与 verified NMP 都属于"深层
+//     null move 复核"类优化,共用最小深度阈值便于推理。
+//   - THREAT_MARGIN=100 ≈ 1 个兵价值:null move 失败 ≥100 才视为"真实威胁",
+//     避免 null score 微弱低于 beta 时也触发 extension(过度延伸拖慢搜索)。
+//   - 仅 i=0(走法排序后首位)走法延伸:threat ext 的语义是"我们的最佳走法值得多看一步",
+//     而不是对所有走法延伸(否则爆炸)。TT/killer 在排序首位,正是最值得延伸的对象。
+//   - MAX_THREAT_EXTENSIONS_PER_LINE=1:与 MAX_CHECK(2) + MAX_SINGULAR(1) 共享
+//     extensionsInLine 计数器,总延伸上限 = 4。每条搜索线最多 1 次 threat ext。
+//
+// 与 Verified NMP (#47) 的关系:
+//   - 当 nullScore >= beta 且 verify 通过:#47 直接 return,不会到 threat ext 检测。
+//   - 当 nullScore >= beta 但 verify 失败:fall-through,此时 nullScore 仍 >= beta,
+//     不满足 < beta - MARGIN,threat ext 不触发(避免与 verify 失败语义冲突)。
+//   - 当 nullScore < beta:正常 fall-through 到主搜索,threat ext 检测可能触发。
+const THREAT_EXTENSION_ENABLED = true;
+const THREAT_EXTENSION_MIN_DEPTH = 5;
+const THREAT_MARGIN = 100;
+const THREAT_EXTENSION_PLY = 1;
+const MAX_THREAT_EXTENSIONS_PER_LINE = 1;
+
 // === Time management ===
 // 基准思考时间(benchmark 用 timeScale 包装 performance.now,此处维持原值以确保 wall clock 可控)。
 // hard 通过 allocateTimeFactor 动态调整:残局/受困多想,开局/复杂少想,关键局面延伸深度。
