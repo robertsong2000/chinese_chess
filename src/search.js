@@ -957,7 +957,71 @@ function evaluateBoard(board, aiSide) {
   // 战术模式检测:fork / pin / discovered attack
   score += tacticBonus(board, aiSide);
   score -= tacticBonus(board, opposite(aiSide));
+  // 实用残局模式:识别必胜结构,鼓励换子进入
+  score += endgamePatternBonus(board, aiSide);
+  score -= endgamePatternBonus(board, opposite(aiSide));
   return score;
+}
+
+// 实用残局模式识别:返回 side 方获得的必胜残局加分。
+// 覆盖 5 种经典必胜/优势局面:车炮对单车 / 车马对单车 / 马兵对单士 /
+// 车对仅剩士象 / 过河兵对孤将。直接服务"残局能赢必胜局面"目标。
+function endgamePatternBonus(board, side) {
+  if (!ENDGAME_PATTERN_BONUS) return 0;
+  const enemy = opposite(side);
+  const mine = livePieces(board).filter((p) => p.side === side && p.type !== TYPES.GENERAL);
+  const theirs = livePieces(board).filter((p) => p.side === enemy && p.type !== TYPES.GENERAL);
+  const count = (arr, t) => {
+    let n = 0;
+    for (const p of arr) if (p.type === t) n += 1;
+    return n;
+  };
+  const myChariots = count(mine, TYPES.CHARIOT);
+  const myCannons = count(mine, TYPES.CANNON);
+  const myHorses = count(mine, TYPES.HORSE);
+  const mySoldiers = count(mine, TYPES.SOLDIER);
+  const oppChariots = count(theirs, TYPES.CHARIOT);
+  const oppCannons = count(theirs, TYPES.CANNON);
+  const oppHorses = count(theirs, TYPES.HORSE);
+  const oppSoldiers = count(theirs, TYPES.SOLDIER);
+  const oppAdvisors = count(theirs, TYPES.ADVISOR);
+  const oppElephants = count(theirs, TYPES.ELEPHANT);
+  const oppAttackers = oppChariots + oppCannons + oppHorses;
+  const oppGuards = oppAdvisors + oppElephants;
+
+  let bonus = 0;
+  // 1. 车炮对单车:经典必胜(opp 仅 1 车,无马炮)
+  if (myChariots >= 1 && myCannons >= 1
+    && oppChariots === 1 && oppCannons === 0 && oppHorses === 0) {
+    bonus += ENDGAME_PATTERN_BONUS.chariotCannonVsChariot;
+  }
+  // 2. 车马对单车:经典必胜
+  if (myChariots >= 1 && myHorses >= 1
+    && oppChariots === 1 && oppCannons === 0 && oppHorses === 0) {
+    bonus += ENDGAME_PATTERN_BONUS.chariotHorseVsChariot;
+  }
+  // 3. 马兵对单士:经典必胜(opp 仅 1 士,无象/攻子/兵)
+  if (myHorses >= 1 && mySoldiers >= 1
+    && oppAdvisors === 1 && oppElephants === 0
+    && oppAttackers === 0 && oppSoldiers === 0) {
+    bonus += ENDGAME_PATTERN_BONUS.horseSoldierVsAdvisor;
+  }
+  // 4. 车对仅剩士象(opp 无攻子无兵,有士象):车必破士象
+  if (myChariots >= 1 && oppAttackers === 0 && oppSoldiers === 0 && oppGuards >= 1) {
+    bonus += ENDGAME_PATTERN_BONUS.chariotVsGuardsOnly;
+  }
+  // 5. 过河兵对孤将(opp 无攻子无士象):鼓励兵升变
+  if (mySoldiers >= 1 && oppAttackers === 0 && oppGuards === 0) {
+    let hasAdvanced = false;
+    for (const p of mine) {
+      if (p.type === TYPES.SOLDIER && crossedRiver(side, p.y)) {
+        hasAdvanced = true;
+        break;
+      }
+    }
+    if (hasAdvanced) bonus += ENDGAME_PATTERN_BONUS.advancedSoldierVsLoneKing;
+  }
+  return bonus;
 }
 
 // 战术模式加分(fork / pin / discovered attack)。

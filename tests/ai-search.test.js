@@ -564,3 +564,65 @@ test("tactic detection: horse fork scores higher than symmetric baseline", () =>
     `evaluateBoard(board, BLACK) should be positive (symmetric material + black fork); got ${result.evalBlack}`,
   );
 });
+
+test("endgame pattern bonus constants cover 5 winning patterns at >= 200", () => {
+  // 契约:ENDGAME_PATTERN_BONUS 覆盖 5 种必胜/优势残局。
+  // 核心必胜(车炮对单车 / 车马对单车 / 马兵对单士)给 500,鼓励换子进入;
+  // 辅助优势(车对仅剩士象 / 过河兵对孤将)给 200-300,鼓励保持优势。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    chariotCannonVsChariot: ENDGAME_PATTERN_BONUS.chariotCannonVsChariot,
+    chariotHorseVsChariot: ENDGAME_PATTERN_BONUS.chariotHorseVsChariot,
+    horseSoldierVsAdvisor: ENDGAME_PATTERN_BONUS.horseSoldierVsAdvisor,
+    chariotVsGuardsOnly: ENDGAME_PATTERN_BONUS.chariotVsGuardsOnly,
+    advancedSoldierVsLoneKing: ENDGAME_PATTERN_BONUS.advancedSoldierVsLoneKing,
+  }))()`);
+  assert.equal(result.chariotCannonVsChariot, 500, "chariotCannonVsChariot should be 500");
+  assert.equal(result.chariotHorseVsChariot, 500, "chariotHorseVsChariot should be 500");
+  assert.equal(result.horseSoldierVsAdvisor, 500, "horseSoldierVsAdvisor should be 500");
+  assert.ok(result.chariotVsGuardsOnly >= 200, "chariotVsGuardsOnly should be >= 200");
+  assert.ok(result.advancedSoldierVsLoneKing >= 100, "advancedSoldierVsLoneKing should be >= 100");
+});
+
+test("endgame pattern: chariot+cannon vs lone chariot is recognized as winning", () => {
+  // 残局局面:红方 车+炮+将,黑方 车+将(经典必胜 — 车炮胜单车)。
+  // 期望:
+  //   1) endgamePatternBonus(board, RED) >= 500(必胜加分)
+  //   2) endgamePatternBonus(board, BLACK) == 0(黑方无必胜结构)
+  //   3) evaluateBoard(board, RED) > 500(红方子力 900+460+对称 + 必胜加分)
+  // 红将 (4,9) 与黑将 (4,0) 同列无阻挡会触发飞将,故意让红将在 (3,9) 错列。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 4, y: 5, alive: true },
+      { id: 'rp', side: SIDES.RED, type: TYPES.CANNON, x: 5, y: 7, alive: true },
+      { id: 'bc', side: SIDES.BLACK, type: TYPES.CHARIOT, x: 4, y: 3, alive: true },
+    ];
+    const redPattern = endgamePatternBonus(board, SIDES.RED);
+    const blackPattern = endgamePatternBonus(board, SIDES.BLACK);
+    const evalRed = evaluateBoard(board, SIDES.RED);
+    return {
+      redPattern,
+      blackPattern,
+      evalRed,
+      winningRecognized: redPattern >= 500,
+      symmetricZero: blackPattern === 0,
+    };
+  })()`);
+  assert.equal(
+    result.winningRecognized,
+    true,
+    `endgamePatternBonus(red) should be >= 500 (chariot+cannon vs lone chariot); got ${result.redPattern}`,
+  );
+  assert.equal(
+    result.symmetricZero,
+    true,
+    `endgamePatternBonus(black) should be 0 (black has no winning pattern); got ${result.blackPattern}`,
+  );
+  assert.ok(
+    result.evalRed > 500,
+    `evaluateBoard(board, RED) should be > 500 (winning pattern + material advantage); got ${result.evalRed}`,
+  );
+});
