@@ -198,7 +198,9 @@
             "src/pikafish-engine.js",
             "tests/pikafish-engine.test.js"
           ],
-          "tests_added": 22
+          "tests_added": 22,
+          "commit_sha": "d07c5b1",
+          "full_commit_sha": "d07c5b1bf3901d9dc2bf1e9f9b1ad8652ec15793"
         },
         {
           "id": 66,
@@ -2156,7 +2158,9 @@
       "timestamp": "2026-08-09T09:54:51+08:00",
       "todo_id": 65,
       "action": "completed",
-      "summary": "#65 vendor/pikafish 准备 + PikafishEngine wrapper + FEN 转换 + 22 测试。vendor/pikafish/{NOTICE.md, download-pikafish.sh} 含 4 source 列表 + size 验证。.gitignore 临时排除 wasm/js。src/pikafish-engine.js 实装 UCI 客户端(loader 解耦,Promise-based)+ boardToFen(xiangqi-WA 大写=红)+ moveToUci/uciToMove(a-i/0-9)+ parseUciInfo。tests/pikafish-engine.test.js 22 测试(FEN 字符表/起始局面/对称/move 双向/uci 解析/mock UCI)。109/109 tests pass(87 v1 + 22 新增),无回归。注:download-pikafish.sh 默认 source=pikafish-vue,因 official 无 wasm release;权限分类器拒下载第三方 fork 二进制,留给用户审核后执行。"
+      "summary": "#65 vendor/pikafish 准备 + PikafishEngine wrapper + FEN 转换 + 22 测试。vendor/pikafish/{NOTICE.md, download-pikafish.sh} 含 4 source 列表 + size 验证。.gitignore 临时排除 wasm/js。src/pikafish-engine.js 实装 UCI 客户端(loader 解耦,Promise-based)+ boardToFen(xiangqi-WA 大写=红)+ moveToUci/uciToMove(a-i/0-9)+ parseUciInfo。tests/pikafish-engine.test.js 22 测试(FEN 字符表/起始局面/对称/move 双向/uci 解析/mock UCI)。109/109 tests pass(87 v1 + 22 新增),无回归。注:download-pikafish.sh 默认 source=pikafish-vue,因 official 无 wasm release;权限分类器拒下载第三方 fork 二进制,留给用户审核后执行。",
+      "commit_sha": "d07c5b1",
+      "full_commit_sha": "d07c5b1bf3901d9dc2bf1e9f9b1ad8652ec15793"
     }
   ],
   "rules": [
