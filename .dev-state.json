@@ -2,23 +2,28 @@
   "project": "chinese_chess",
   "repo": "https://github.com/robertsong2000/chinese_chess",
   "repo_path": "/home/robertsong/workspace/claude-2/chinese-chess-work",
-  "goal": "提升 AI 棋力到二级棋士 - 一级棋士水平(Elo ~1800-2200)",
+  "goal": "v2: 接入 Pikafish WASM,达到特级大师/棋圣级棋力(Elo 2600+)",
   "goal_definition": {
-    "elo_equivalent": "1800-2200",
-    "chess_strength": "二级棋士 - 一级棋士(业余顶级 - 准专业)",
+    "elo_target": 2600,
+    "elo_pivot_threshold": 3000,
+    "chess_strength": "特级大师 / 棋圣级(超过所有人类世界冠军)",
+    "success_threshold": {
+      "depth_reachable_in_5sec": 18,
+      "estimated_elo": 2600,
+      "tests_pass_min": 90,
+      "benchmark_beats_v1": true
+    },
+    "pivot_threshold": {
+      "depth": 25,
+      "note": "超过 depth 25 需要 SharedArrayBuffer 多线程(COOP/COEP headers)"
+    },
     "behavioral_targets": [
-      "完全不送子(送子检测 + 严格防守)",
-      "开局熟练(开局库 + 主要变着)",
-      "能看 5-7 步(深度 + 选择性延伸 + hash table)",
-      "残局能赢必胜局面(残局评估 + 简单 tablebase)",
-      "中局有战术组合能力(牵制、双击、闪击、抽将)",
-      "知道时间管理(关键局面思考更深)",
-      "不会输给新手陷阱(常见陷阱防御)"
-    ],
-    "rating_progression_reference": [
-      "三级棋士 ~1600-1800(Phase 1 完成后预期)",
-      "二级棋士 ~1800-2000(Phase 1 + Phase 1.5 部分)",
-      "一级棋士 ~2000-2200(Phase 1 + Phase 1.5 全部)"
+      "Pikafish 在浏览器里能跑,不依赖服务器",
+      "标准笔记本 hard 模式 depth 18 在 5 秒内返回走法",
+      "UI 流畅(思考时不阻塞,有进度反馈)",
+      "加 'engine mode' 切换(自研 AI vs Pikafish)",
+      "保留 v1 vanilla AI 作为 fallback",
+      "首次加载 WASM 后,后续访问零延迟(service worker 缓存)"
     ]
   },
   "current_baseline": {
@@ -32,7 +37,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 14,
+  "current_phase": "V2-1",
   "phases": [
     {
       "id": 1,
@@ -169,6 +174,34 @@
           "tests_added": 4
         }
       ]
+    },
+    {
+      "id": "V2-1",
+      "name": "Pikafish 基础集成",
+      "todo_count": 7,
+      "priority": "P0",
+      "rationale": "让 Pikafish 在浏览器能跑"
+    },
+    {
+      "id": "V2-2",
+      "name": "工程化(缓存 + UI + fallback)",
+      "todo_count": 4,
+      "priority": "P0",
+      "rationale": "用户体验和生产级容错"
+    },
+    {
+      "id": "V2-3",
+      "name": "棋力强化(opening book + tablebase + 多线程)",
+      "todo_count": 3,
+      "priority": "P1",
+      "rationale": "把 Pikafish 潜力榨干"
+    },
+    {
+      "id": "V2-4",
+      "name": "验证 + 文档",
+      "todo_count": 4,
+      "priority": "P0",
+      "rationale": "v2.0.0 release 准备"
     }
   ],
   "todos": [
@@ -1243,6 +1276,305 @@
       "attempts": 1,
       "completed_at": "2026-08-09T08:13:29+08:00",
       "commit_sha": "e8441342e10955624230ecfb2bf11b80e6784825"
+    },
+    {
+      "id": 65,
+      "phase": "V2-1",
+      "category": "Pikafish-基础",
+      "title": "下载 Pikafish WASM 到 vendor/",
+      "description": "从 Pikafish 官方 release 下载最新的 .wasm + pikafish.js loader 到 vendor/pikafish/。在 .gitattributes 标记为 binary(避免 diff 噪音)。预估 15 分钟。",
+      "files": [
+        "vendor/pikafish/pikafish.wasm",
+        "vendor/pikafish/pikafish.js",
+        ".gitattributes"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 15,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 66,
+      "phase": "V2-1",
+      "category": "Pikafish-基础",
+      "title": "实现 UCI 协议 wrapper",
+      "description": "新建 src/pikafish-uci.js:实现 send('position fen ...') / send('go depth N') / waitForBestmove() 的 Promise 化 API。Pikafish 输出多行,要解析 'bestmove ...' 行。预估 25 分钟。",
+      "files": [
+        "src/pikafish-uci.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 67,
+      "phase": "V2-1",
+      "category": "Pikafish-基础",
+      "title": "PikafishEngine 引擎管理类",
+      "description": "新建 src/pikafish-engine.js:PikafishEngine class,封装 init()、getMove(fen, depth)、terminate()。处理 engine ready 状态、错误恢复。预估 25 分钟。",
+      "files": [
+        "src/pikafish-engine.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 68,
+      "phase": "V2-1",
+      "category": "Pikafish-基础",
+      "title": "FEN 序列化(board → FEN string)",
+      "description": "新建 src/fen.js:把 state.board 序列化成 Pikafish 能识别的 xiangqi FEN 串(注意:xiangqi FEN 和国际象棋不同,有特殊规则)。预估 25 分钟。",
+      "files": [
+        "src/fen.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 69,
+      "phase": "V2-1",
+      "category": "Pikafish-基础",
+      "title": "UI 加引擎模式切换",
+      "description": "在 index.html 加 segmented control: '自研 AI' / 'Pikafish 引擎'。state 加 engineMode 字段。chooseAIMove 根据 engineMode 分流。预估 25 分钟。",
+      "files": [
+        "index.html",
+        "app.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 70,
+      "phase": "V2-1",
+      "category": "Pikafish-基础",
+      "title": "难度映射 + 异步思考流程",
+      "description": "Pikafish 难度映射:easy=depth 6,normal=12,hard=18,master=22。把 chooseAIMove 改成 async,加 thinking indicator UI。预估 30 分钟。",
+      "files": [
+        "app.js",
+        "index.html"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 71,
+      "phase": "V2-1",
+      "category": "Pikafish-基础",
+      "title": "端到端测试(mock Pikafish)",
+      "description": "tests/pikafish-integration.test.js:mock Pikafish 响应,测试从 board 到 bestmove 的完整链路。包括 FEN 转换、UCI 协议、async 流程。预估 30 分钟。",
+      "files": [
+        "tests/pikafish-integration.test.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 72,
+      "phase": "V2-2",
+      "category": "Pikafish-工程化",
+      "title": "Service worker 缓存 WASM",
+      "description": "加 service-worker.js,缓存 pikafish.wasm(3-5MB)。二次访问零网络延迟。预估 25 分钟。",
+      "files": [
+        "service-worker.js",
+        "index.html"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 73,
+      "phase": "V2-2",
+      "category": "Pikafish-工程化",
+      "title": "Loading 进度条 UI",
+      "description": "WASM 加载时显示进度(下载中 / 编译中 / 就绪)。避免用户以为页面卡死。预估 20 分钟。",
+      "files": [
+        "index.html",
+        "app.js",
+        "styles.css"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 20,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 74,
+      "phase": "V2-2",
+      "category": "Pikafish-工程化",
+      "title": "错误处理 + fallback 到 vanilla AI",
+      "description": "如果 Pikafish 加载失败 / 执行出错,自动 fallback 到 v1 vanilla AI,显示提示。预估 20 分钟。",
+      "files": [
+        "app.js",
+        "src/pikafish-engine.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 20,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 75,
+      "phase": "V2-2",
+      "category": "Pikafish-工程化",
+      "title": "扩展单元测试覆盖",
+      "description": "tests/pikafish-engine.test.js:测试 PikafishEngine 各种状态(未初始化、思考中、终止后)。预估 25 分钟。",
+      "files": [
+        "tests/pikafish-engine.test.js"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 76,
+      "phase": "V2-3",
+      "category": "Pikafish-强化",
+      "title": "接入 Pikafish opening book",
+      "description": "下载 Pikafish 官方 opening book(可选,1-5MB),让 Pikafish 用。预估 20 分钟。",
+      "files": [
+        "vendor/pikafish/books/"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 20,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 77,
+      "phase": "V2-3",
+      "category": "Pikafish-强化",
+      "title": "接入 6-piece endgame tablebase",
+      "description": "下载 6 子残局库(完美残局下法)。让 Pikafish 在残局阶段查表。预估 30 分钟。",
+      "files": [
+        "vendor/pikafish/tablebases/"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 78,
+      "phase": "V2-3",
+      "category": "Pikafish-强化",
+      "title": "多线程(SharedArrayBuffer)",
+      "description": "如果部署环境支持 COOP/COEP headers,启用 Pikafish 多线程模式 (~30% 加速)。否则文档说明限制。预估 30 分钟。",
+      "files": [
+        "src/pikafish-engine.js",
+        "docker-compose.yml",
+        "README.md"
+      ],
+      "priority": "P1",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 79,
+      "phase": "V2-4",
+      "category": "Pikafish-验证",
+      "title": "Benchmark:Pikafish vs v1 vanilla AI",
+      "description": "扩展 tests/ai-benchmark.js:让 Pikafish 和 v1 各自下棋,对比棋力、速度、深度。结果写 docs/plans/v2-benchmark.md。预估 30 分钟。",
+      "files": [
+        "tests/ai-benchmark.js",
+        "docs/plans/v2-benchmark.md"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 30,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 80,
+      "phase": "V2-4",
+      "category": "Pikafish-文档",
+      "title": "更新 README 反映双引擎架构",
+      "description": "README 加 '双引擎架构' 章节:自研 AI(v1) + Pikafish(v2)。说明何时用哪个。预估 25 分钟。",
+      "files": [
+        "README.md"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 25,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 81,
+      "phase": "V2-4",
+      "category": "Pikafish-文档",
+      "title": "更新 PRD 反映 v2 架构",
+      "description": "中国象棋游戏PRD.md 加章节:'v2.0 双引擎架构 + Pikafish 集成方案'。预估 20 分钟。",
+      "files": [
+        "中国象棋游戏PRD.md"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 20,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
+    },
+    {
+      "id": 82,
+      "phase": "V2-4",
+      "category": "Pikafish-文档",
+      "title": "CHANGELOG v2.0.0 + 打 v2.0.0 tag",
+      "description": "CHANGELOG 加 v2.0.0 entry。git tag v2.0.0(本地,不 push)。预估 15 分钟。",
+      "files": [
+        "CHANGELOG.md"
+      ],
+      "priority": "P0",
+      "status": "pending",
+      "estimated_min": 15,
+      "attempts": 0,
+      "completed_at": null,
+      "commit_sha": null
     }
   ],
   "history": [
@@ -1758,10 +2090,38 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "Phase 13 TODO #61 完成(2026-08-08T23:17:33.931116Z)。下次:#62 Hanging piece static penalty(静态送子检测,补强 quiescence 在非 capture 序列上的盲区)。然后 #63 Phase 13 self-play 防退化回归测试。",
-  "converged": true,
-  "converged_at": "2026-08-09T08:48:08+08:00",
-  "converged_reason": "原定目标(二级-一级棋士,Elo 1800-2200)已达成。Phase 1-13 共 63 个 TODO 全部完成,83 测试全过,估算实际棋力 Elo ~2100-2200(一级棋士水平)。Phase 4 之后进入边际收益递减区(每个新 phase 提升 < 30 Elo),Phase 9+ 命名出现 V5/V6/V7/V8/V9 + '防退化' 关键词,确认已撞 vanilla JS 架构天花板。用户判定:停止 cron,转向 Pikafish WASM 集成(如有更高目标)或保持当前完成态作为 v1.0。",
+  "next_run_hint": "v2 开始,从 id=65 (下载 Pikafish WASM) 开始。Phase V2-1 优先。",
+  "converged": false,
+  "converged_at": null,
+  "converged_reason": null,
   "cron_status": "deleted (was 8d7ccf33, removed 2026-08-09)",
-  "v1_release_ready": true
+  "v1_release_ready": true,
+  "v1_summary": {
+    "tag": "v1.0.0",
+    "completed_at": "2026-08-09",
+    "todos_done": 64,
+    "phases_completed": 14,
+    "tests_pass": 83,
+    "strength_estimate_elo": "2100-2200",
+    "strength_level": "一级棋士",
+    "architecture": "自研 vanilla JS + Web Workers + 模块化",
+    "files": [
+      "app.js",
+      "src/constants.js",
+      "src/rules.js",
+      "src/search.js",
+      "ai-worker.js"
+    ]
+  },
+  "convergence_config": {
+    "max_phases": 8,
+    "max_commits": 60,
+    "max_runtime_days": 7,
+    "convergence_min_delta_percent": 10,
+    "recent_polish_phase_limit": 2
+  },
+  "v1_converged_at": "2026-08-09T08:48:08+08:00",
+  "v1_converged_reason": "v1 目标(一级棋士 Elo 2200)已达成,停止 v1 自研优化,进入 v2 Pikafish 集成阶段",
+  "version": "v2-in-progress",
+  "phase_evaluations": []
 }
