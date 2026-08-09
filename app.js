@@ -870,6 +870,26 @@ function syncSettingsUI() {
   buttons.themeToggle.checked = settings.darkBoard;
 }
 
+// === Service Worker 注册(V2 #68,缓存 pikafish.wasm,二次访问零延迟)===
+// 守卫条件:
+//   - 仅在浏览器主线程运行(Node 测试环境 / Worker 子线程跳过)。
+//   - 仅在支持 serviceWorker 的浏览器注册。
+//   - file:// 协议无 SW 支持(SecurityError),跳过。
+//   - 注册失败仅 console.warn,不阻断游戏。
+(function registerServiceWorker() {
+  if (typeof window === "undefined") return;
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  if (location.protocol === "file:") return;
+  navigator.serviceWorker
+    .register("sw.js")
+    .then(() => {
+      console.info("[sw] registered (pikafish.wasm caching enabled)");
+    })
+    .catch((err) => {
+      console.warn(`[sw] registration failed: ${err && err.message}`);
+    });
+})();
+
 bindEvents();
 loadGame();
 syncSettingsUI();
