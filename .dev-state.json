@@ -32,7 +32,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": 13,
+  "current_phase": 14,
   "phases": [
     {
       "id": 1,
@@ -142,6 +142,33 @@
       "priority": "P0",
       "rationale": "Phase 12 完成 tempo + 中炮 + pinned mobility,但车类协同缺失。本阶段补『双车联动』(经典『双车错』杀法基础)+ 静态送子检测(补强 quiescence SEE 在非 capture 序列上的盲区)+ Phase 13 self-play 防退化回归测试,稳定 2200。",
       "status": "done"
+    },
+    {
+      "id": 14,
+      "name": "评估精化 V10(Trade-Down + 简化棋局,稳定一级棋士 2200)",
+      "todo_count": 1,
+      "priority": "P0",
+      "rationale": "Phase 13 完成 Connected Chariots + Hanging Piece + Phase 13 self-play 防退化。但缺『简化棋局』维度:赢方主动换子放大相对优势是经典棋类引擎 Elo 技巧,直接服务『残局能赢必胜局面』目标。本阶段加 Trade-Down Material Bonus,鼓励赢方主动等价兑换。",
+      "status": "done",
+      "todos": [
+        {
+          "id": 64,
+          "title": "Trade-Down Material Bonus(简化棋局)",
+          "priority": "P0",
+          "estimated_min": 20,
+          "attempts": 1,
+          "status": "done",
+          "completed_at": "2026-08-09T08:30:00+08:00",
+          "commit_sha": "7373eb6b0a65d262c9d4fc135f030b3e8d1234cf",
+          "description": "新增 TRADE_DOWN_BONUS 常量 + tradeDownBonus(board, side) 函数。当 side 方非将子力明显领先(>= minImbalance=200)且棋盘已换子时,按 (|imbalance| - minImbalance) * multiplier=0.1 * tradeProgress 加分,封顶 maxBonus=60。tradeProgress = (startNonGenCount=30 - 非将子总数) / 30。对称不变量:初始局面 imbalance=0 → 双方均 0。evaluateBoard 双向相减。补强残局/中局简化棋局识别。",
+          "files": [
+            "src/constants.js",
+            "src/search.js",
+            "tests/ai-search.test.js"
+          ],
+          "tests_added": 4
+        }
+      ]
     }
   ],
   "todos": [
@@ -1706,6 +1733,13 @@
       "action": "completed",
       "summary": "#63 Phase 13 self-play regression: 复用 #60 的 4-局 hard-vs-normal 结构(2 局 hard 先手 + 2 局 normal 先手),断言 hard 整体不被 normal 战胜(hardWins >= normalWins)。专门保护 Phase 13 的 Connected Chariots + Hanging Piece Penalty 评估精化。83/83 tests pass.",
       "commit_sha": "e8441342e10955624230ecfb2bf11b80e6784825"
+    },
+    {
+      "timestamp": "2026-08-09T08:30:00+08:00",
+      "todo_id": 64,
+      "action": "completed",
+      "summary": "#64 Trade-Down Material Bonus:constants TRADE_DOWN_BONUS{enabled,minImbalance=200,multiplier=0.1,maxBonus=60,startNonGenCount=30};search.js tradeDownBonus(board,side) 计算双方非将子力差 |imbalance|,>=minImbalance 时按 (|imb|-minImb)*multiplier*tradeProgress 加分(tradeProgress=(30-非将子总数)/30),封顶 maxBonus;evaluateBoard 双向相减。对称不变量:初始局面 imbalance=0 → 双方均 0。4 新测试(constants/initial 对称/+1230cp 局面/minImbalance 守卫);87/87 tests pass。",
+      "commit_sha": "7373eb6b0a65d262c9d4fc135f030b3e8d1234cf"
     }
   ],
   "rules": [
