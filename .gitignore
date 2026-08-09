@@ -31,3 +31,12 @@ Thumbs.db
 coverage/
 .cache/
 .nyc_output/
+
+# Pikafish WASM binaries — obtained via vendor/pikafish/download-pikafish.sh
+# (not committed until distribution source is finalized; see NOTICE.md)
+vendor/pikafish/*.wasm
+vendor/pikafish/*.js
+!vendor/pikafish/download-pikafish.sh
+
+# Dev state backups (auto-saved by dev cron)
+.dev-state.json.bak*

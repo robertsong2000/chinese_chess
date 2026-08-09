@@ -180,7 +180,79 @@
       "name": "Pikafish 基础集成",
       "todo_count": 7,
       "priority": "P0",
-      "rationale": "让 Pikafish 在浏览器能跑"
+      "rationale": "让 Pikafish 在浏览器能跑",
+      "todos": [
+        {
+          "id": 65,
+          "title": "下载 Pikafish WASM 到 vendor/pikafish/ + 工程外围准备(notice/script/wrapper)",
+          "priority": "P0",
+          "estimated_min": 30,
+          "attempts": 1,
+          "status": "done",
+          "completed_at": "2026-08-09T09:54:51+08:00",
+          "description": "vendor/pikafish/ 准备就绪。NOTICE.md 说明 4 个获取来源(official-native/pikafish-vue/xiangqiai-com/local-build)+ GPLv3 继承。download-pikafish.sh 含 size 验证(37842 js / 701758 wasm),默认 source=pikafish-vue。.gitignore 临时排除 *.wasm/*.js(等用户审核来源后决定是否入库)。src/pikafish-engine.js 实装 PikafishEngine wrapper class(loader 解耦,Promise-based UCI)+ boardToFen(xiangqi-WA 格式,大写=红/小写=黑)+ moveToUci/uciToMove(a-i/0-9 坐标)+ parseUciInfo(depth/seldepth/score cp|mate/pv)。tests/pikafish-engine.test.js 22 个测试覆盖 FEN 字符表/对称/起始局面/死子过滤/side-to-move/move 双向/uci 解析/mock loader UCI 协议(position/setOption/quit/_handleExit 退出 reject/sendCommand 前置校验)。109/109 tests pass(87 v1 + 22 新增),无回归。",
+          "files": [
+            "vendor/pikafish/NOTICE.md",
+            "vendor/pikafish/download-pikafish.sh",
+            ".gitignore",
+            "src/pikafish-engine.js",
+            "tests/pikafish-engine.test.js"
+          ],
+          "tests_added": 22
+        },
+        {
+          "id": 66,
+          "title": "Worker 中集成 PikafishEngine(浏览器 importScripts 加载 pikafish.js,postMessage 接口契约对齐 ai-worker.js)",
+          "priority": "P0",
+          "estimated_min": 25,
+          "attempts": 0,
+          "status": "pending"
+        },
+        {
+          "id": 67,
+          "title": "app.js 集成 engine mode 切换(自研 AI vs Pikafish)UI + 默认 fallback",
+          "priority": "P0",
+          "estimated_min": 30,
+          "attempts": 0,
+          "status": "pending"
+        },
+        {
+          "id": 68,
+          "title": "Service Worker 缓存 pikafish.wasm(二次访问零延迟)",
+          "priority": "P1",
+          "estimated_min": 25,
+          "attempts": 0,
+          "status": "pending"
+        },
+        {
+          "id": 69,
+          "title": "PikafishEngine 真实 smoke test(用户运行 download-pikafish.sh 后,node 加载真 wasm + go depth 5)",
+          "priority": "P1",
+          "estimated_min": 20,
+          "attempts": 0,
+          "status": "pending",
+          "blocked_on": "user runs download-pikafish.sh"
+        },
+        {
+          "id": 70,
+          "title": "Pikafish 思考中 UI 进度反馈(显示 depth/score/pv)",
+          "priority": "P1",
+          "estimated_min": 20,
+          "attempts": 0,
+          "status": "pending"
+        },
+        {
+          "id": 71,
+          "title": "棋力对比 benchmark(self-play: Pikafish vs v1 hard 100 局)",
+          "priority": "P1",
+          "estimated_min": 30,
+          "attempts": 0,
+          "status": "pending",
+          "blocked_on": "user runs download-pikafish.sh"
+        }
+      ],
+      "status": "active",
+      "started_at": "2026-08-09T09:54:51+08:00"
     },
     {
       "id": "V2-2",
@@ -2079,6 +2151,12 @@
       "action": "converged",
       "summary": "Cron 任务自我终结。目标已达成,停止生成新 phase。",
       "commit_sha": null
+    },
+    {
+      "timestamp": "2026-08-09T09:54:51+08:00",
+      "todo_id": 65,
+      "action": "completed",
+      "summary": "#65 vendor/pikafish 准备 + PikafishEngine wrapper + FEN 转换 + 22 测试。vendor/pikafish/{NOTICE.md, download-pikafish.sh} 含 4 source 列表 + size 验证。.gitignore 临时排除 wasm/js。src/pikafish-engine.js 实装 UCI 客户端(loader 解耦,Promise-based)+ boardToFen(xiangqi-WA 大写=红)+ moveToUci/uciToMove(a-i/0-9)+ parseUciInfo。tests/pikafish-engine.test.js 22 测试(FEN 字符表/起始局面/对称/move 双向/uci 解析/mock UCI)。109/109 tests pass(87 v1 + 22 新增),无回归。注:download-pikafish.sh 默认 source=pikafish-vue,因 official 无 wasm release;权限分类器拒下载第三方 fork 二进制,留给用户审核后执行。"
     }
   ],
   "rules": [
@@ -2090,7 +2168,7 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "v2 开始,从 id=65 (下载 Pikafish WASM) 开始。Phase V2-1 优先。",
+  "next_run_hint": "V2-1 #66:Worker 集成 PikafishEngine。需要先把 pikafish.js 在 importScripts 后挂 self.Pikafish,再实例化 PikafishEngine(loader=() => Promise.resolve(self.Pikafish))。",
   "converged": false,
   "converged_at": null,
   "converged_reason": null,
