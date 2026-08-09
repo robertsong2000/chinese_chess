@@ -37,7 +37,7 @@
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
-  "current_phase": "V2-1",
+  "current_phase": "V2-2",
   "phases": [
     {
       "id": 1,
@@ -297,12 +297,24 @@
           "priority": "P1",
           "estimated_min": 30,
           "attempts": 0,
-          "status": "pending",
-          "blocked_on": "user runs download-pikafish.sh"
+          "status": "done",
+          "blocked_on": "user runs download-pikafish.sh",
+          "completed_at": "2026-08-09T13:43:40+08:00",
+          "commit_sha": "507622e",
+          "full_commit_sha": "507622e",
+          "tests_added": 15,
+          "description": "#71 v2 self-play benchmark harness:bench/v2-benchmark.js (VanillaPlayer/PikafishPlayer 抽象 + preflight pikafish.worker.js gap + 降级路径 + Elo/Wilson CI 数学)+ tests/v2-benchmark.test.js (15 测试:Elo 边界/CI 单调/parseEngineSpec/PikafishPlayer.init fingerprint/playOneGame vanilla + degradation)+ docs/plans/v2-benchmark-results.{json,md} 2 真实 benchmark 报告。Validation:4 局 hard-vs-normal(hard 4/4 胜 checkmate,avg 62 ply,无降级)+ 2 局 pikafish-vs-hard(全部 ply 降级,preflight 正常)。Pikafish 真实 Elo 待 loader contract 修复(见 docs/PIKAFISH-LOADER.md)。",
+          "files": [
+            "bench/v2-benchmark.js",
+            "tests/v2-benchmark.test.js",
+            "docs/plans/v2-benchmark-results.json",
+            "docs/plans/v2-benchmark-results.md"
+          ]
         }
       ],
-      "status": "active",
-      "started_at": "2026-08-09T09:54:51+08:00"
+      "status": "done",
+      "started_at": "2026-08-09T09:54:51+08:00",
+      "completed_at": "2026-08-09T13:43:40+08:00"
     },
     {
       "id": "V2-2",
@@ -1534,11 +1546,11 @@
         "tests/pikafish-integration.test.js"
       ],
       "priority": "P0",
-      "status": "pending",
+      "status": "done",
       "estimated_min": 30,
       "attempts": 0,
-      "completed_at": null,
-      "commit_sha": null
+      "completed_at": "2026-08-09T13:43:40+08:00",
+      "commit_sha": "507622e"
     },
     {
       "id": 72,
@@ -2282,6 +2294,14 @@
       "action": "done",
       "commit": "477946e",
       "summary": "#83 V2-2 a) Pikafish 不可用 → 用户级 notice + 自动切回 vanilla:showEngineNotice/clearEngineNotice/renderEngineNotice/noticePikafishUnavailable_ 4 函数 + state.engineNotice 字段 + els.engineNotice 元素映射。chooseAIMoveAsync 6 fallback 路径全接入,data-engine handler + startGame 清 notice。去重(相同 key 不覆盖)+ mode 始终切回 vanilla。index.html 加 role='alert' notice div,styles.css 警示色。18 新测试全过,191/192 pass,无回归"
+    },
+    {
+      "ts": "2026-08-09T13:43:40+08:00",
+      "todo": 71,
+      "phase": "V2-1",
+      "action": "done",
+      "commit": "507622e",
+      "summary": "#71 v2 self-play benchmark harness 完成:bench/v2-benchmark.js + 15 测试 + 2 真实报告。V2-1 phase 全部 done,V2-2 进行中。"
     }
   ],
   "rules": [
@@ -2326,5 +2346,20 @@
   "v1_converged_at": "2026-08-09T08:48:08+08:00",
   "v1_converged_reason": "v1 目标(一级棋士 Elo 2200)已达成,停止 v1 自研优化,进入 v2 Pikafish 集成阶段",
   "version": "v2-in-progress",
-  "phase_evaluations": []
+  "phase_evaluations": [
+    {
+      "phase": "V2-1",
+      "evaluated_at": "2026-08-09T13:43:40+08:00",
+      "tests_pass": true,
+      "tests_count": 207,
+      "tests_pass_count": 206,
+      "tests_skipped": 1,
+      "depth_reachable": 6,
+      "depth_reachable_note": "vanilla v1 hard in 300ms/ply time-box; real game ~depth 8-10; pikafish depth N/A (loader gap)",
+      "est_elo": 2200,
+      "delta_vs_previous": 0,
+      "primary_value": "PikafishEngine + ai-worker + UI + SW cache + smoke test + fallback + self-play benchmark harness — 所有 wrapper/集成层完成",
+      "gap": "Pikafish 真实棋力未测量:wasm 是 pthread-enabled 但缺 pikafish.worker.js,_fd_read 被 stub 为返回 52(无 stdin)。详见 docs/PIKAFISH-LOADER.md。"
+    }
+  ]
 }
