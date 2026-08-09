@@ -225,16 +225,36 @@
           "title": "app.js 集成 engine mode 切换(自研 AI vs Pikafish)UI + 默认 fallback",
           "priority": "P0",
           "estimated_min": 30,
-          "attempts": 0,
-          "status": "pending"
+          "attempts": 1,
+          "status": "done",
+          "completed_at": "2026-08-09T11:10:00+08:00",
+          "commit_sha": "247d4cc",
+          "full_commit_sha": "247d4cca7d2e8a91e2b8bc1ea6a1c2b2a25db6cd",
+          "description": "v2 #67 完成:UI + 主线程 wiring + 12 测试。index.html 加 AI 引擎 segmented (自研 AI/Pikafish 引擎)+ info-grid 加 engineModeText。app.js settings 加 engineMode(默认 vanilla,loadGame 持久化复用)。新增 buildWorkerMessage 纯函数:vanilla → 完整 v1 ctx;pikafish → {engine:'pikafish', lean ctx(无 moveHistory/snapshots)}。修复潜伏 bug:原 .map(row=>row.slice()) 假设 board 是 2D 矩阵,实际是 flat 棋子数组(被 AI_WORKER_ENABLED=false 掩盖),改用 cloneBoard 深拷贝。chooseAIMoveAsync:pikafish 模式强制 worker(绕过 AI_WORKER_ENABLED);安全 timer pikafish ≥ 15000ms 给 depth 18 留余地;engine-ready/status/info 消息静默处理(#70 接 UI)。bindEvents/syncSettingsUI/renderInfo 全部接入。138/138 pass(原 126 + 新增 12)。pikafish 真实运行需 download-pikafish.sh(#69 前置),未配置 worker 返回 error → fallback 同步 vanilla,游戏不阻塞。",
+          "files": [
+            "app.js",
+            "index.html",
+            "tests/app-engine-mode.test.js"
+          ],
+          "tests_added": 12
         },
         {
           "id": 68,
           "title": "Service Worker 缓存 pikafish.wasm(二次访问零延迟)",
           "priority": "P1",
           "estimated_min": 25,
-          "attempts": 0,
-          "status": "pending"
+          "attempts": 1,
+          "status": "done",
+          "completed_at": "2026-08-09T11:16:06.871774+08:00",
+          "commit_sha": "9456a60",
+          "full_commit_sha": "9456a60995fa9c3f10cde6c1ba9cebf1df3e407b",
+          "description": "v2 #68 完成:sw.js + app.js SW 注册块 + tests/sw.test.js(10 测试)。sw.js:PRECACHE_URLS 含 10 项(HTML/CSS/JS/ai-worker/pikafish.js+wasm),OPTIONAL_PRECACHE_PREFIXES 让 vendor/pikafish.* 缺失不阻断 install;install 用 cache.add(必选 throw / 可选 console.warn)+ skipWaiting;activate caches.keys() 清旧 + clients.claim();fetch 导航 network-first(HTML 新鲜,offline 回退 index.html),静态资源 stale-while-revalidate;CACHE_VERSION='v1-68-1'。app.js 顶部 IIFE 注册 SW,守卫 typeof window/navigator/file:;位置在 bindEvents/loadGame/render 4 行 init 之前以保持engine-harness INITIALIZATION 正则有效。tests/sw.test.js 静态源码解析 + sandbox 解析(因 Node 无 ServiceWorker 全局,vm 中 const/let 不暴露 context,改用源码断言)。148/148 tests pass(原 138 + 新增 10),无回归。",
+          "files": [
+            "sw.js",
+            "app.js",
+            "tests/sw.test.js"
+          ],
+          "tests_added": 10
         },
         {
           "id": 69,
@@ -2179,6 +2199,22 @@
       "action": "done",
       "commit": "6f015d9",
       "summary": "ai-worker 双模式 worker(v1 placeholder + v2 pikafish engine mode)+ 17 测试,126/126 全过"
+    },
+    {
+      "ts": "2026-08-09T11:10:00+08:00",
+      "todo": 67,
+      "phase": "V2-1",
+      "action": "done",
+      "commit": "247d4cc",
+      "summary": "#67 app.js engine mode UI 集成 + 默认 vanilla fallback:buildWorkerMessage 纯函数(vanilla/pikafish 精简 ctx) + 修复潜伏 .map(row.slice()) bug + chooseAIMoveAsync pikafish 强制 worker + PIKAFISH_FALLBACK_GUARD_MS=15000 + engine-info 消息静默 + 12 新测试,138/138 全过"
+    },
+    {
+      "ts": "2026-08-09T11:16:06.871774+08:00",
+      "todo": 68,
+      "phase": "V2-1",
+      "action": "done",
+      "commit": "9456a60",
+      "summary": "#68 Service Worker 缓存 pikafish.wasm:sw.js(PRECACHE+OPTIONAL+network-first/SWR+versioned)+ app.js 注册 IIFE(三道守卫,在 init 之前以保持 harness 正则有效)+ 10 新测试,148/148 pass"
     }
   ],
   "rules": [
@@ -2190,7 +2226,7 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "V2-1 #67:app.js 集成 engine mode 切换 UI(自研 AI vs Pikafish) + 默认 fallback。要点:加 settings.engineMode = 'vanilla'|'pikafish';UI 加单选/下拉;scheduleAI 在 pikafish 模式时,chooseAIMoveAsync 发 {type:'search', engine:'pikafish', ctx:{board, currentSide, aiDifficulty}};worker 收到 engine-info 时主线程更新 thinking UI(深度/nps/pv);若 worker 返回 error(pikafish 未配置 / wasm 加载失败),fallback 同步 chooseAIMove() 不阻塞游戏;默认 vanilla(v1),用户显式切到 pikafish 才用引擎。注意:pikafish.js 由用户跑 download-pikafish.sh 才有,#67 仅做 wiring,不依赖真实 wasm 也能跑测试。",
+  "next_run_hint": "V2-1 #68:Service Worker 缓存 pikafish.wasm(二次访问零延迟)。要点:新增 sw.js,cache 名 'chinese-chess-v2-<ts>',install 时 cache.addAll(['/','/index.html','/styles.css','/app.js','/ai-worker.js','/src/constants.js','/src/rules.js','/src/search.js','/src/pikafish-engine.js','/vendor/pikafish/pikafish.js','/vendor/pikafish/pikafish.wasm']);fetch 事件:cache-first for vendor/pikafish/*,network-first for others(便于开发);index.html 注册 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(err => console.warn);注意:wasm 文件用户跑 download-pikafish.sh 后才有,SW cache.add 失败时跳过(不阻塞 install);测试:sw.js 是浏览器 SW,无法在 node 直接跑;通过契约测试验证 cache 列表完整 + 路径正确 + sw.js 语法正确(node --check);若 #68 时间紧,可拆 #68a(skeleton + 注册)+ #68b(策略细化)。",
   "converged": false,
   "converged_at": null,
   "converged_reason": null,
