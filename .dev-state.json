@@ -270,8 +270,18 @@
           "title": "Pikafish 思考中 UI 进度反馈(显示 depth/score/pv)",
           "priority": "P1",
           "estimated_min": 20,
-          "attempts": 0,
-          "status": "pending"
+          "attempts": 1,
+          "status": "done",
+          "completed_at": "2026-08-09T13:30:00+08:00",
+          "commit_sha": "461f322",
+          "full_commit_sha": "461f3227300eb1a860f240bbfc17facd88faa6cb",
+          "description": "v2 #70 完成:Pikafish 思考时 UI 显示 depth/score/pv 进度。新增 formatEngineInfo(info) 纯函数(深度 N/M、分数 cp→±N.NN / mate→杀 ±N、pv 截断 4 加 …、nps→kNps)。state.engineInfo 字段(createGame 初始化 null)。renderEngineInfo 独立渲染函数(与 renderInfo 解耦,info 消息频繁触发不全量 render;仅 pikafish + thinking + engineInfo 齐备时显示,否则 hidden+清空 textContent)。chooseAIMoveAsync handler 接 engine-info 消息(更新 state.engineInfo + renderEngineInfo;result/error 清 engineInfo;engine-ready/status 静默)。scheduleAI 思考开始 + callback 结束都清 engineInfo。index.html 加 <p id='engineInfo' aria-live='polite' hidden> 在 info-grid 之后 message 之上。tests/app-engine-info.test.js 22 测试覆盖(formatEngineInfo 13 用例 + state 初始 null + els wiring + renderEngineInfo 5 隐藏/显示场景)。170/170 tests pass(原 148 + 新增 22),无回归。",
+          "files": [
+            "app.js",
+            "index.html",
+            "tests/app-engine-info.test.js"
+          ],
+          "tests_added": 22
         },
         {
           "id": 71,
@@ -2226,7 +2236,7 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "V2-1 #68:Service Worker 缓存 pikafish.wasm(二次访问零延迟)。要点:新增 sw.js,cache 名 'chinese-chess-v2-<ts>',install 时 cache.addAll(['/','/index.html','/styles.css','/app.js','/ai-worker.js','/src/constants.js','/src/rules.js','/src/search.js','/src/pikafish-engine.js','/vendor/pikafish/pikafish.js','/vendor/pikafish/pikafish.wasm']);fetch 事件:cache-first for vendor/pikafish/*,network-first for others(便于开发);index.html 注册 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(err => console.warn);注意:wasm 文件用户跑 download-pikafish.sh 后才有,SW cache.add 失败时跳过(不阻塞 install);测试:sw.js 是浏览器 SW,无法在 node 直接跑;通过契约测试验证 cache 列表完整 + 路径正确 + sw.js 语法正确(node --check);若 #68 时间紧,可拆 #68a(skeleton + 注册)+ #68b(策略细化)。",
+  "next_run_hint": "V2-1 剩余 TODOs 都 blocked_on user runs download-pikafish.sh(#69 真实 smoke test, #71 棋力 benchmark)。下一步可考虑:(1) 让 #69/#71 在 user 提供 wasm 后再跑;(2) 或者推进 V2-2 工程化(P0,4 todos):a) Pikafish 加载失败时优雅降级到 v1 + 用户提示,b) Service Worker 版本升级策略(避免旧 cache 卡死),c) 移动端 worker 性能监控,mobile thinking budget 调整,d) Error reporting/Sentry 接入预备;(3) 或 V2-4 文档(P0,4 todos):README 更新 + Pikafish 来源说明 + INSTALL 步骤 + FAQ。建议优先 V2-2(a/b)容错,因为 pikafish 真实环境一旦失败游戏需 graceful fallback。",
   "converged": false,
   "converged_at": null,
   "converged_reason": null,
