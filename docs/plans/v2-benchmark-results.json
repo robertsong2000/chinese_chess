@@ -1,0 +1,51 @@
+{
+  "ranAt": "2026-08-09T05:41:48.332Z",
+  "pikafishWasRequested": true,
+  "pikafishAvailable": false,
+  "pikafishStatus": {
+    "red": "unavailable: pikafish.worker.js not bundled (pthread bootstrap unavailable)",
+    "black": "n/a"
+  },
+  "config": {
+    "games": 2,
+    "redEngine": "pikafish(d=12)",
+    "blackEngine": "vanilla-hard",
+    "maxPly": 20,
+    "drawPly": 15,
+    "pikafishDepth": 12
+  },
+  "summary": {
+    "redWins": 2,
+    "blackWins": 0,
+    "draws": 0,
+    "redScore": 1,
+    "eloRedVsBlack": 800,
+    "eloCILo": -113,
+    "eloCIHi": 800,
+    "totalDegradations": 20,
+    "avgPly": 20,
+    "totalMs": 23039
+  },
+  "perGame": [
+    {
+      "id": 1,
+      "red": "pikafish(d=12)",
+      "black": "vanilla-hard",
+      "winner": "red",
+      "reason": "material_majority",
+      "plies": 20,
+      "elapsedMs": 11529,
+      "degradations": 10
+    },
+    {
+      "id": 2,
+      "red": "pikafish(d=12)",
+      "black": "vanilla-hard",
+      "winner": "red",
+      "reason": "material_majority",
+      "plies": 20,
+      "elapsedMs": 11510,
+      "degradations": 10
+    }
+  ]
+}
