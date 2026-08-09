@@ -1215,7 +1215,7 @@
       "status": "done",
       "attempts": 1,
       "completed_at": "2026-08-09T08:13:29+08:00",
-      "commit_sha": "PENDING_COMMIT"
+      "commit_sha": "e8441342e10955624230ecfb2bf11b80e6784825"
     }
   ],
   "history": [
@@ -1705,7 +1705,7 @@
       "todo_id": 63,
       "action": "completed",
       "summary": "#63 Phase 13 self-play regression: 复用 #60 的 4-局 hard-vs-normal 结构(2 局 hard 先手 + 2 局 normal 先手),断言 hard 整体不被 normal 战胜(hardWins >= normalWins)。专门保护 Phase 13 的 Connected Chariots + Hanging Piece Penalty 评估精化。83/83 tests pass.",
-      "commit_sha": "PENDING_COMMIT"
+      "commit_sha": "e8441342e10955624230ecfb2bf11b80e6784825"
     }
   ],
   "rules": [
