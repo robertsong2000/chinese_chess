@@ -11,6 +11,7 @@ const els = {
   turnText: document.querySelector("#turnText"),
   difficultyText: document.querySelector("#difficultyText"),
   engineModeText: document.querySelector("#engineModeText"),
+  engineInfo: document.querySelector("#engineInfo"),
   message: document.querySelector("#message"),
   moveList: document.querySelector("#moveList"),
   moveCount: document.querySelector("#moveCount"),
@@ -68,6 +69,7 @@ function createGame(playerSide, difficulty) {
     updatedAt: now,
     lastMove: null,
     thinking: false,
+    engineInfo: null,
   };
 }
 
@@ -271,6 +273,41 @@ function buildWorkerMessage(s) {
   };
 }
 
+// 格式化 Pikafish engine-info 为可读字符串(#70)。
+// 输入示例:{ depth:18, seldepth:22, score:{unit:"cp", value:123}, pv:["h2e2","h9g7","c3c4"], nodes:..., nps:... }
+// score unit="cp" 时 value 是厘兵(centipawn),换算成"兵"(pawns)并加符号;unit="mate" 显示为"杀 N"。
+// pv 用 UCI 表示(棋力强用户已能读),截断到前 4 个 move,后面加 " …"。
+// 思考空 / 输入 falsy → 返回 ""(UI 隐藏)。
+// 纯函数,便于测试。
+function formatEngineInfo(info) {
+  if (!info || typeof info !== "object") return "";
+  const parts = [];
+  if (typeof info.depth === "number") {
+    parts.push(`深度 ${info.depth}${typeof info.seldepth === "number" ? `/${info.seldepth}` : ""}`);
+  }
+  if (info.score && typeof info.score === "object") {
+    const { unit, value } = info.score;
+    if (unit === "cp" && typeof value === "number" && Number.isFinite(value)) {
+      const pawns = value / 100;
+      const sign = value > 0 ? "+" : value < 0 ? "" : "±";
+      parts.push(`分数 ${sign}${pawns.toFixed(2)}`);
+    } else if (unit === "mate" && typeof value === "number") {
+      const sign = value > 0 ? "+" : "";
+      parts.push(`杀 ${sign}${value}`);
+    }
+  }
+  if (Array.isArray(info.pv) && info.pv.length) {
+    const pvShort = info.pv.slice(0, 4).join(" ");
+    const more = info.pv.length > 4 ? " …" : "";
+    parts.push(`pv: ${pvShort}${more}`);
+  }
+  if (typeof info.nps === "number" && info.nps > 0) {
+    const knps = (info.nps / 1000).toFixed(0);
+    parts.push(`${knps}k nps`);
+  }
+  return parts.join(" · ");
+}
+
 // 异步版 AI 走法选择:浏览器若启用 Worker,走 worker-first-then-sync-fallback 路径;
 // node/无 Worker 环境直接同步 callback(chooseAIMove())。
 // pikafish 模式必须用 worker(worker 端 importScripts vendor/pikafish/pikafish.js)。
@@ -303,16 +340,28 @@ function chooseAIMoveAsync(s, callback) {
     const data = event && event.data;
     if (!data) return;
     if (data.type === "ready") return;
-    // pikafish 启动/状态/进度消息:#70 接 UI;此处先忽略,等 result
-    if (data.type === "engine-ready" || data.type === "engine-status" || data.type === "engine-info") {
+    // pikafish 启动/状态消息(无进度数据),仅 log
+    if (data.type === "engine-ready" || data.type === "engine-status") {
+      return;
+    }
+    // pikafish 进度:#70 实时渲染 depth/score/pv 到 UI
+    if (data.type === "engine-info") {
+      if (state.thinking && data.info) {
+        state.engineInfo = data.info;
+        renderEngineInfo();
+      }
       return;
     }
     if (data.type === "result") {
       clearTimeout(safetyTimer);
+      state.engineInfo = null;
+      renderEngineInfo();
       // worker 未实现搜索时 move=null → fallback 同步搜索
       finish(data.move ? data.move : chooseAIMove());
     } else if (data.type === "error") {
       clearTimeout(safetyTimer);
+      state.engineInfo = null;
+      renderEngineInfo();
       console.warn("AI worker error, fallback to sync:", data.error);
       finish(chooseAIMove());
     }
@@ -335,11 +384,15 @@ function chooseAIMoveAsync(s, callback) {
 function scheduleAI() {
   clearTimeout(aiTimer);
   state.thinking = true;
+  state.engineInfo = null;
   render();
+  renderEngineInfo();
   aiTimer = setTimeout(() => {
     if (state.status !== "playing" || state.currentSide === state.playerSide) return;
     chooseAIMoveAsync(state, (move) => {
       state.thinking = false;
+      state.engineInfo = null;
+      renderEngineInfo();
       if (move) executeMove(move, true);
       else evaluateGameEnd();
     });
@@ -656,6 +709,27 @@ function renderInfo() {
   if (isInCheck(state.board, state.currentSide) && state.status === "playing") {
     els.gameStatus.textContent = `${sideName(state.currentSide)}被将军`;
   }
+}
+
+// 渲染 Pikafish 思考进度(#70)。
+// 仅 pikafish + thinking + engineInfo 三者齐备时显示文本,否则隐藏。
+// 与 renderInfo 解耦(engine-info 消息频繁触发,无需全量 render)。
+function renderEngineInfo() {
+  if (!els.engineInfo) return;
+  const visible = settings.engineMode === "pikafish" && state.thinking && state.engineInfo;
+  if (!visible) {
+    els.engineInfo.hidden = true;
+    els.engineInfo.textContent = "";
+    return;
+  }
+  const text = formatEngineInfo(state.engineInfo);
+  if (!text) {
+    els.engineInfo.hidden = true;
+    els.engineInfo.textContent = "";
+    return;
+  }
+  els.engineInfo.hidden = false;
+  els.engineInfo.textContent = text;
 }
 
 function renderMoves() {
