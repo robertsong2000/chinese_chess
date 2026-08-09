@@ -2387,6 +2387,105 @@ test("#62 hangingPiecePenalty: symmetric on initial board (no attacks → 0 pena
     `hangingPiecePenalty(BLACK) on initial board should be 0; got ${result.blackPenalty}`);
 });
 
+test("#64 tradeDownBonus: constants configured for simplification bonus", () => {
+  // 契约:TRADE_DOWN_BONUS 默认 enabled,minImbalance > 0(均势不触发),
+  // multiplier > 0,maxBonus > 0,startNonGenCount = 30(每方 15 × 2)。
+  const engine = createEngine();
+  const result = engine.json(`(() => ({
+    enabled: TRADE_DOWN_BONUS.enabled,
+    minImbalance: TRADE_DOWN_BONUS.minImbalance,
+    multiplier: TRADE_DOWN_BONUS.multiplier,
+    maxBonus: TRADE_DOWN_BONUS.maxBonus,
+    startNonGenCount: TRADE_DOWN_BONUS.startNonGenCount,
+  }))()`);
+  assert.equal(result.enabled, true, "TRADE_DOWN_BONUS should be enabled by default");
+  assert.ok(result.minImbalance > 0,
+    `minImbalance should be > 0 (avoid noisy bonus in balanced positions); got ${result.minImbalance}`);
+  assert.ok(result.multiplier > 0,
+    `multiplier should be > 0; got ${result.multiplier}`);
+  assert.ok(result.maxBonus > 0 && result.maxBonus <= 100,
+    `maxBonus should be in (0, 100] (cap ~ half a horse); got ${result.maxBonus}`);
+  assert.equal(result.startNonGenCount, 30,
+    `startNonGenCount should be 30 (15 non-gen pieces per side × 2); got ${result.startNonGenCount}`);
+});
+
+test("#64 tradeDownBonus: returns 0 on initial board (symmetric / no trades yet)", () => {
+  // 对称不变量:初始局面双方子力相等 → imbalance = 0 → 双方 tradeDownBonus = 0。
+  // 同时 tradeProgress = 0(还没换子),即便失衡也不会触发。
+  // 防止评估精化破坏对称性。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = initialPieces();
+    return {
+      redBonus: tradeDownBonus(board, SIDES.RED),
+      blackBonus: tradeDownBonus(board, SIDES.BLACK),
+    };
+  })()`);
+  assert.equal(result.redBonus, 0,
+    `tradeDownBonus(RED) on initial board should be 0 (no imbalance, no trades); got ${result.redBonus}`);
+  assert.equal(result.blackBonus, 0,
+    `tradeDownBonus(BLACK) on initial board should be 0 (no imbalance, no trades); got ${result.blackBonus}`);
+});
+
+test("#64 tradeDownBonus: ahead side gets positive bonus proportional to trade progress", () => {
+  // 战术结构:红方剩 车+马+将(子力 900+430 = 1330),黑方剩 卒+将(子力 100)。
+  // imbalance = 1330 - 100 = 1230(>> minImbalance=200)。
+  // 非将子总数 = 3(车+马+卒) → tradeProgress = (30 - 3) / 30 = 0.9(已大量换子)。
+  // magnitude = min(60, (1230 - 200) * 0.1) = min(60, 103) = 60(封顶)。
+  // bonus(RED) = +60 * 0.9 = +54;bonus(BLACK) = -54。
+  // 注:红将 (4,9) 黑将 (4,0) 同列无遮挡会触发飞将,故错列让红将在 (3,9)。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rc', side: SIDES.RED, type: TYPES.CHARIOT, x: 4, y: 5, alive: true },
+      { id: 'rh', side: SIDES.RED, type: TYPES.HORSE, x: 5, y: 7, alive: true },
+      { id: 'bs', side: SIDES.BLACK, type: TYPES.SOLDIER, x: 4, y: 6, alive: true },
+    ];
+    const redBonus = tradeDownBonus(board, SIDES.RED);
+    const blackBonus = tradeDownBonus(board, SIDES.BLACK);
+    const expectedMagnitude = Math.min(
+      TRADE_DOWN_BONUS.maxBonus,
+      (1230 - TRADE_DOWN_BONUS.minImbalance) * TRADE_DOWN_BONUS.multiplier,
+    ) * 0.9; // tradeProgress = 0.9
+    return { redBonus, blackBonus, expectedMagnitude };
+  })()`);
+  // 红方领先 → 正分;黑方落后 → 等量负分。
+  assert.ok(result.redBonus > 0,
+    `tradeDownBonus(RED) should be > 0 when ahead; got ${result.redBonus}`);
+  assert.ok(result.blackBonus < 0,
+    `tradeDownBonus(BLACK) should be < 0 when behind; got ${result.blackBonus}`);
+  // 对称性:|redBonus| == |blackBonus|
+  assert.ok(Math.abs(result.redBonus + result.blackBonus) < 1,
+    `|redBonus| should equal |blackBonus| (symmetric eval); got red=${result.redBonus}, black=${result.blackBonus}`);
+  // 量级:bonus ≈ expected magnitude(允许 maxBonus 封顶后 tradeProgress 乘积)
+  assert.ok(Math.abs(result.redBonus - result.expectedMagnitude) < 1,
+    `tradeDownBonus(RED) should ≈ ${result.expectedMagnitude.toFixed(2)} (maxBonus cap * tradeProgress); got ${result.redBonus}`);
+});
+
+test("#64 tradeDownBonus: small imbalance (< minImbalance) returns 0 (no noisy bonus)", () => {
+  // 守卫契约:imbalance < minImbalance 时返回 0(均势 / 微差不触发,避免噪声)。
+  // 局面:红方 +1 兵(value 100),远低于 minImbalance=200。
+  // 同时也是大量换子(tradeProgress 高)的位置,双重确认 minImbalance 守卫生效。
+  const engine = createEngine();
+  const result = engine.json(`(() => {
+    const board = [
+      { id: 'rg', side: SIDES.RED, type: TYPES.GENERAL, x: 3, y: 9, alive: true },
+      { id: 'bg', side: SIDES.BLACK, type: TYPES.GENERAL, x: 4, y: 0, alive: true },
+      { id: 'rs', side: SIDES.RED, type: TYPES.SOLDIER, x: 4, y: 5, alive: true },
+    ];
+    return {
+      redBonus: tradeDownBonus(board, SIDES.RED),
+      blackBonus: tradeDownBonus(board, SIDES.BLACK),
+    };
+  })()`);
+  assert.equal(result.redBonus, 0,
+    `tradeDownBonus(RED) with imbalance=100 (< minImbalance=200) should be 0; got ${result.redBonus}`);
+  assert.equal(result.blackBonus, 0,
+    `tradeDownBonus(BLACK) with imbalance=-100 (< minImbalance magnitude) should be 0; got ${result.blackBonus}`);
+});
+
 test("#60 self-play regression: hard does not lose to normal across a 4-game match", () => {
   // Phase 5/7 曾因评估调整(原 ENDGAME_PATTERN_BONUS 500/500)引发 self-play 退化:
   // hard 0/4 输给 normal。本测试为 Phase 12 评估精化(Tempo / Center Cannon / Pinned Mobility)

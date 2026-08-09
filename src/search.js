@@ -1304,6 +1304,9 @@ function evaluateBoard(board, aiSide, side = null) {
   // #62 Hanging Piece Penalty(静态送子检测):非将子被廉价攻击且无廉价回吃 → 扣分
   score += hangingPiecePenalty(board, aiSide);
   score -= hangingPiecePenalty(board, opposite(aiSide));
+  // #64 Trade-Down Bonus(简化棋局):领先方在 tradeProgress > 0 时按子力差加分
+  score += tradeDownBonus(board, aiSide);
+  score -= tradeDownBonus(board, opposite(aiSide));
   // #51 残局双兵过河协同(必胜结构):仅 endgame 阶段加分
   if (endgame) {
     score += endgameSoldierCoordinationBonus(board, aiSide);
@@ -1936,6 +1939,37 @@ function hangingPiecePenalty(board, side) {
     penalty += pVal * HANGING_PIECE_PENALTY.fraction;
   }
   return -penalty;
+}
+
+// #64 Trade-Down Bonus(简化棋局):当 side 方非将子力明显领先时,
+// 鼓励等价兑换 — 每次兑换都缩小对手的相对反击空间(经典棋类引擎 Elo 技巧)。
+// bonus = sign(imbalance) * min(maxBonus, (|imbalance| - minImbalance) * multiplier) * tradeProgress
+// 其中 tradeProgress = (startNonGenCount - 当前非将子总数) / startNonGenCount ∈ [0,1]。
+// 对称不变量:双方子力相等 → imbalance=0 → 返回 0(初始局面 / 均势均触发)。
+function tradeDownBonus(board, side) {
+  if (!TRADE_DOWN_BONUS || !TRADE_DOWN_BONUS.enabled) return 0;
+  let myMat = 0;
+  let oppMat = 0;
+  let totalNonGen = 0;
+  const enemy = opposite(side);
+  for (const piece of livePieces(board)) {
+    if (piece.type === TYPES.GENERAL) continue;
+    totalNonGen += 1;
+    if (piece.side === side) myMat += PIECE_VALUE[piece.type];
+    else if (piece.side === enemy) oppMat += PIECE_VALUE[piece.type];
+  }
+  const imbalance = myMat - oppMat;
+  const absImb = Math.abs(imbalance);
+  if (absImb < TRADE_DOWN_BONUS.minImbalance) return 0;
+  const startCount = TRADE_DOWN_BONUS.startNonGenCount;
+  const tradeProgress = startCount > 0 ? Math.max(0, 1 - totalNonGen / startCount) : 0;
+  if (tradeProgress <= 0) return 0;
+  const magnitude = Math.min(
+    TRADE_DOWN_BONUS.maxBonus,
+    (absImb - TRADE_DOWN_BONUS.minImbalance) * TRADE_DOWN_BONUS.multiplier,
+  );
+  const sign = imbalance > 0 ? 1 : -1;
+  return sign * magnitude * tradeProgress;
 }
 
 // #58 Center Cannon Opening Bonus:开局阶段 side 方有炮在中线原位行时加分。

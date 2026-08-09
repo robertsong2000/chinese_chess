@@ -571,6 +571,21 @@ const HANGING_PIECE_PENALTY = {
   fraction: 0.25, // 悬子扣自身价值的 25%(单车 -225,单马 -100,过河兵 -25)
 };
 
+// #64 Trade-Down Bonus(简化棋局):当一方非将子力明显领先时,
+// 加分 ∝ (领先量 - minImbalance) × tradeProgress × multiplier。
+// tradeProgress = (startNonGenCount - 当前非将子数) / startNonGenCount ∈ [0, 1]。
+// 直接服务『残局能赢必胜局面』+『中局有战术组合能力』:赢方主动换子,
+// 每次等价兑换都让对手的相对反击空间缩小 → 经典棋类引擎 Elo 提分技巧。
+// 对称不变量:初始局面双方子力相等 → imbalance=0 → 双方 bonus 均为 0。
+// 取值保守:minImbalance=200(避免轻微差触发噪声)、maxBonus=60(完整简化封顶 ~ 半只马)。
+const TRADE_DOWN_BONUS = {
+  enabled: true,
+  minImbalance: 200, // 双方非将子力绝对差 < 此值视为均势,不加分
+  multiplier: 0.1, // (|imbalance| - minImbalance) × multiplier → magnitude(每点子力差对应的加分)
+  maxBonus: 60, // 单方加分封顶(避免残局 +5000 cp 把评估爆掉)
+  startNonGenCount: 30, // 初始局面非将子总数:每方 15(去掉将)× 2
+};
+
 const POSITION_BONUS = {
   general: [
     [0, 0, 0, 8, 12, 8, 0, 0, 0],
