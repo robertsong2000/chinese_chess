@@ -140,7 +140,8 @@
       "name": "评估精化 V9(Connected Chariots + Phase 13 self-play 防退化,稳定一级棋士 2200)",
       "todo_count": 3,
       "priority": "P0",
-      "rationale": "Phase 12 完成 tempo + 中炮 + pinned mobility,但车类协同缺失。本阶段补『双车联动』(经典『双车错』杀法基础)+ 静态送子检测(补强 quiescence SEE 在非 capture 序列上的盲区)+ Phase 13 self-play 防退化回归测试,稳定 2200。"
+      "rationale": "Phase 12 完成 tempo + 中炮 + pinned mobility,但车类协同缺失。本阶段补『双车联动』(经典『双车错』杀法基础)+ 静态送子检测(补强 quiescence SEE 在非 capture 序列上的盲区)+ Phase 13 self-play 防退化回归测试,稳定 2200。",
+      "status": "done"
     }
   ],
   "todos": [
@@ -1196,8 +1197,10 @@
       ],
       "estimated_min": 22,
       "priority": "P0",
-      "status": "pending",
-      "attempts": 0
+      "status": "done",
+      "attempts": 1,
+      "completed_at": "2026-08-09T07:46:31+08:00",
+      "commit_sha": "864f8e5"
     },
     {
       "id": 63,
@@ -1209,8 +1212,10 @@
       ],
       "estimated_min": 12,
       "priority": "P0",
-      "status": "pending",
-      "attempts": 0
+      "status": "done",
+      "attempts": 1,
+      "completed_at": "2026-08-09T08:13:29+08:00",
+      "commit_sha": "PENDING_COMMIT"
     }
   ],
   "history": [
@@ -1687,6 +1692,20 @@
       "action": "completed",
       "summary": "#61 Connected Chariots eval: constants CONNECTED_CHARIOTS_BONUS=30;search.js chariotCoordinationBonus(board, side) — 同方两车同列/行 + 中间无子 → +30/对;evaluateBoard 双向相减(初始 0/0,中局过河后联通触发)。Spot check: 同列(3,3)/(3,6) 无阻挡 → +30。78/78 tests pass.",
       "commit_sha": "6ae0582b97afdef45c61281d4ab473431a20d9ca"
+    },
+    {
+      "timestamp": "2026-08-09T07:46:31+08:00",
+      "todo_id": 62,
+      "action": "completed",
+      "summary": "#62 Hanging Piece Penalty:constants HANGING_PIECE_PENALTY{enabled,fraction=0.25};search.js hangingPiecePenalty(side) 扫描非将子 P,找敌方廉价攻击方 A(value[A]<=value[P]) + 我方廉价防守方 D(value[D]<=value[A]);A 存在且 D 不存在 → P 悬,扣 fraction*value[P]。补强 quiescence SEE 在非 capture 序列盲区。3 个新测试(constants + undefended chariot by horse + defended by friendly horse + initial-board symmetry)。82/82 tests pass。",
+      "commit_sha": "864f8e5"
+    },
+    {
+      "timestamp": "2026-08-09T08:13:29+08:00",
+      "todo_id": 63,
+      "action": "completed",
+      "summary": "#63 Phase 13 self-play regression: 复用 #60 的 4-局 hard-vs-normal 结构(2 局 hard 先手 + 2 局 normal 先手),断言 hard 整体不被 normal 战胜(hardWins >= normalWins)。专门保护 Phase 13 的 Connected Chariots + Hanging Piece Penalty 评估精化。83/83 tests pass.",
+      "commit_sha": "PENDING_COMMIT"
     }
   ],
   "rules": [
