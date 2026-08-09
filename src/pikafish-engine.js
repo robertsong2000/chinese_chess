@@ -295,23 +295,24 @@ class PikafishEngine {
   }
 }
 
-// 导出公共 API(浏览器:挂 window;Node:挂 module.exports)。
+// 导出公共 API(浏览器主线程:挂 window;Worker:挂 self;Node:挂 module.exports)。
 // 复用 v1 双环境模式,与 src/constants.js / src/rules.js 一致。
+// v2 #66:Worker 中无 window,但有 self;importScripts 后挂 self 给 ai-worker.js 用。
+const PIKAFISH_PUBLIC_API = {
+  PikafishEngine,
+  boardToFen,
+  moveToUci,
+  uciToMove,
+  parseUciInfo,
+  PIECE_TYPE_TO_FEN,
+  FEN_TO_PIECE_TYPE,
+};
 if (typeof window !== "undefined") {
-  window.PikafishEngine = PikafishEngine;
-  window.boardToFen = boardToFen;
-  window.moveToUci = moveToUci;
-  window.uciToMove = uciToMove;
-  window.parseUciInfo = parseUciInfo;
+  Object.assign(window, PIKAFISH_PUBLIC_API);
+}
+if (typeof self !== "undefined" && typeof window === "undefined") {
+  Object.assign(self, PIKAFISH_PUBLIC_API);
 }
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    PikafishEngine,
-    boardToFen,
-    moveToUci,
-    uciToMove,
-    parseUciInfo,
-    PIECE_TYPE_TO_FEN,
-    FEN_TO_PIECE_TYPE,
-  };
+  module.exports = PIKAFISH_PUBLIC_API;
 }
