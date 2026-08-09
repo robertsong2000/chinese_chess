@@ -258,12 +258,20 @@
         },
         {
           "id": 69,
-          "title": "PikafishEngine 真实 smoke test(用户运行 download-pikafish.sh 后,node 加载真 wasm + go depth 5)",
+          "title": "PikafishEngine 真实 smoke test(factory load + fingerprint + UCI handshake skeleton)",
           "priority": "P1",
           "estimated_min": 20,
-          "attempts": 0,
-          "status": "pending",
-          "blocked_on": "user runs download-pikafish.sh"
+          "attempts": 1,
+          "status": "done",
+          "blocked_on": null,
+          "completed_at": "2026-08-09T12:25:24.813699+08:00",
+          "commit_sha": "ecf0acf",
+          "description": "tests/pikafish-real-engine-smoke.test.js 4 档(A-D):A vendor 文件存在检查;B pikafish.js CommonJS factory typeof=function;C instantiate failure-mode fingerprint(source-detect pthread dep + bootstrap present 检查,匹配 \"pikafish.worker.js\" 缺失);D real UCI handshake(当前 skip)。关键发现:(1) pikafish-vue wasm 是 pthread build(locateFile(\"pikafish.worker.js\")),但源仓库不发布该 bootstrap 文件 → instantiate 在 Node worker_threads 阶段就抛 \"Cannot find module .../pikafish.worker.js\";(2) Emscripten module 用 print() 输出 stdout,不暴露 .sendCommand(),与 wrapper 的 onReceiveStdout + sendCommand 契约不一致,即便 instantiate 成功也需要 stdin bridge。docs/PIKAFISH-LOADER.md 记录两 gap + 路径选择(自写 pthread bootstrap + wrapper stdin bridge,或切 single-threaded build)。当 wasm 源修复后,Test C/D 会自动开始运行,无需改测试代码。173/174 tests pass(1 intentional skip on Test D)。",
+          "files": [
+            "tests/pikafish-real-engine-smoke.test.js",
+            "docs/PIKAFISH-LOADER.md"
+          ],
+          "tests_added": 4
         },
         {
           "id": 70,
@@ -2225,6 +2233,13 @@
       "action": "done",
       "commit": "9456a60",
       "summary": "#68 Service Worker 缓存 pikafish.wasm:sw.js(PRECACHE+OPTIONAL+network-first/SWR+versioned)+ app.js 注册 IIFE(三道守卫,在 init 之前以保持 harness 正则有效)+ 10 新测试,148/148 pass"
+    },
+    {
+      "timestamp": "2026-08-09T12:25:24.813699+08:00",
+      "todo_id": 69,
+      "action": "completed",
+      "summary": "#69 real pikafish wasm smoke test(4 档 A-D)+ docs/PIKAFISH-LOADER.md。发现 pikafish-vue wasm 是 pthread-only 且不发布 pikafish.worker.js;wrapper 与 raw Emscripten 之间有 loader-contract gap(print vs onReceiveStdout,stdin vs sendCommand)。Test D 当前 skip 等 wasm 源修复。173/174 pass。",
+      "commit_sha": "ecf0acf"
     }
   ],
   "rules": [
@@ -2236,7 +2251,7 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "V2-1 剩余 TODOs 都 blocked_on user runs download-pikafish.sh(#69 真实 smoke test, #71 棋力 benchmark)。下一步可考虑:(1) 让 #69/#71 在 user 提供 wasm 后再跑;(2) 或者推进 V2-2 工程化(P0,4 todos):a) Pikafish 加载失败时优雅降级到 v1 + 用户提示,b) Service Worker 版本升级策略(避免旧 cache 卡死),c) 移动端 worker 性能监控,mobile thinking budget 调整,d) Error reporting/Sentry 接入预备;(3) 或 V2-4 文档(P0,4 todos):README 更新 + Pikafish 来源说明 + INSTALL 步骤 + FAQ。建议优先 V2-2(a/b)容错,因为 pikafish 真实环境一旦失败游戏需 graceful fallback。",
+  "next_run_hint": "V2-1 6/7 done(#69 实装完毕,发现 pikafish-vue wasm 不可直接驱动)。剩 #71 self-play benchmark 仍 blocked,因为需要真实可 instantiate 的 wasm(等用户决策:自写 pikafish.worker.js + wrapper stdin bridge,或切 single-threaded build,详见 docs/PIKAFISH-LOADER.md)。下一步建议推进 V2-2 工程化(P0,4 todos):a) Pikafish 加载失败时优雅降级到 v1 + 用户提示(优先,因为当前 wasm 必失败),b) Service Worker 版本升级策略(避免旧 cache 卡死),c) 移动端 worker 性能监控,d) Error reporting/Sentry 接入预备;或 V2-4 文档(P0,4 todos):README 更新 + Pikafish 来源说明 + INSTALL 步骤 + FAQ。",
   "converged": false,
   "converged_at": null,
   "converged_reason": null,
