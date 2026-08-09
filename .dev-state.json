@@ -2302,6 +2302,13 @@
       "action": "done",
       "commit": "507622e",
       "summary": "#71 v2 self-play benchmark harness 完成:bench/v2-benchmark.js + 15 测试 + 2 真实报告。V2-1 phase 全部 done,V2-2 进行中。"
+    },
+    {
+      "timestamp": "2026-08-09T13:49:14+08:00",
+      "todo_id": null,
+      "action": "converged",
+      "summary": "v2 自动化能力到边界。V2-1 7/7 done + V2-2 1/4 done(工程外围),206/207 tests pass。pikafish 真实运行被 loader-contract gap(pthread build + 无 sendCommand + Node 无 importScripts)阻塞,需用户切 single-threaded build(路径 B)。详见 docs/V2-AUTOMATION-BOUNDARY.md。",
+      "commit_sha": null
     }
   ],
   "rules": [
@@ -2313,10 +2320,10 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "V2-2 启动,#83 完成(Pikafish 不可用 → 用户级 notice + 自动切回 vanilla,18 测试)。V2-2 剩余:b) Service Worker 版本升级策略(避免旧 cache 卡死)— 当 sw.js 内容变(如 #68 加 pikafish.js+wasm 到 precache),旧 client 仍持有旧 cache,CACHE_VERSION 升级触发 activate 清理,但若用户处于 stale 版本切换期,需考虑提示用户刷新;c) 移动端 worker 性能监控(pikafish depth 18 在低端手机可能 >5s,需降级 depth 或 movetime 限制);d) Error reporting/Sentry 接入预备(worker 端 window.onerror 捕获,主线程上报)。V2-1 #71 仍 blocked(等用户运行 download-pikafish.sh 或决策 wasm 源)。建议下一步:b) SW 版本升级策略(中等复杂度,纯 sw.js + 可能加 UI 刷新提示)。",
-  "converged": false,
-  "converged_at": null,
-  "converged_reason": null,
+  "next_run_hint": "v2 cron 已自动收敛(2026-08-09)。后续每次触发 exit 立即结束。用户决策路径:推荐 B(切 single-threaded build,无 COEP 依赖,PWA 友好)。完成后改 .dev-state.json: converged=false + 加 V2-1.5 phase(loader bridge 适配)。详见 docs/V2-AUTOMATION-BOUNDARY.md。",
+  "converged": true,
+  "converged_at": "2026-08-09T13:49:14+08:00",
+  "converged_reason": "v2 自动化能力到边界,等待用户决策。V2-1 phase 全部 7/7 done(206/207 tests pass + 1 skip on pikafish real UCI handshake),V2-2 a) #83 done(用户级 notice + 自动 fallback)。但 v2 真实棋力目标(Elo 2600+)被 pikafish loader-contract gap 阻塞:(1) vendor/pikafish/pikafish.{js,wasm} 是 pthread-only build,缺 pikafish.worker.js;(2) Node worker_threads 不支持 importScripts,Node 路径(benchmark/真实测试)无解;(3) 浏览器路径需 COOP/COEP + 自写 bootstrap;(4) Emscripten module 无 sendCommand API,wrapper 需内建 stdin bridge(~80 行)。剩余 V2-2 b/c/d todos 是纯工程外围(0 Elo delta),V2-3 opening book/多线程 依赖 pikafish 真实运行,V2-4 文档等真实数据。继续 cron 自动化边际价值 < convergence_min_delta_percent=10% → 收敛。用户决策路径(B 切 single-threaded build / C 自编译 + COEP)详见 docs/V2-AUTOMATION-BOUNDARY.md。恢复 cron 的条件:用户切换 wasm 源后改 converged=false + 加 V2-1.5 phase。",
   "cron_status": "deleted (was 8d7ccf33, removed 2026-08-09)",
   "v1_release_ready": true,
   "v1_summary": {
@@ -2360,6 +2367,18 @@
       "delta_vs_previous": 0,
       "primary_value": "PikafishEngine + ai-worker + UI + SW cache + smoke test + fallback + self-play benchmark harness — 所有 wrapper/集成层完成",
       "gap": "Pikafish 真实棋力未测量:wasm 是 pthread-enabled 但缺 pikafish.worker.js,_fd_read 被 stub 为返回 52(无 stdin)。详见 docs/PIKAFISH-LOADER.md。"
+    },
+    {
+      "phase": "V2-1",
+      "evaluated_at": "2026-08-09T13:49:14+08:00",
+      "tests_pass": true,
+      "tests_total": 207,
+      "tests_passed": 206,
+      "tests_skipped": 1,
+      "depth_reachable": null,
+      "est_elo": null,
+      "delta_vs_previous": null,
+      "notes": "V2-1 完成全部 7 todos(下载脚本/wrapper/worker/UI/SW/smoke/进度/benchmark framework),pikafish 真实运行被 loader-contract gap(pthread-only build + Node worker_threads 无 importScripts + Emscripten 无 sendCommand API)阻塞。Elo 实测不可行。详见 docs/V2-AUTOMATION-BOUNDARY.md。"
     }
   ]
 }
