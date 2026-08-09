@@ -40,3 +40,6 @@ vendor/pikafish/*.js
 
 # Dev state backups (auto-saved by dev cron)
 .dev-state.json.bak*
+
+# Cron-generated progress reports (delivered via cc-connect DM, not source)
+.reports/
