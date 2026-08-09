@@ -431,6 +431,39 @@ h1 {
   line-height: 1.55;
 }
 
+.engine-notice {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(179, 38, 30, 0.08);
+  border: 1px solid rgba(179, 38, 30, 0.36);
+  color: var(--red);
+  font-size: 13px;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.engine-notice .engine-notice-text {
+  flex: 1;
+}
+
+.engine-notice button.engine-notice-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.7;
+}
+
+.engine-notice button.engine-notice-close:hover {
+  opacity: 1;
+}
+
 .button-grid {
   grid-template-columns: 1fr 1fr;
 }

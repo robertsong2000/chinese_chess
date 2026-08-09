@@ -12,6 +12,9 @@ const els = {
   difficultyText: document.querySelector("#difficultyText"),
   engineModeText: document.querySelector("#engineModeText"),
   engineInfo: document.querySelector("#engineInfo"),
+  engineNotice: document.querySelector("#engineNotice"),
+  engineNoticeText: document.querySelector("#engineNoticeText"),
+  engineNoticeClose: document.querySelector("#engineNoticeClose"),
   message: document.querySelector("#message"),
   moveList: document.querySelector("#moveList"),
   moveCount: document.querySelector("#moveCount"),
@@ -70,6 +73,7 @@ function createGame(playerSide, difficulty) {
     lastMove: null,
     thinking: false,
     engineInfo: null,
+    engineNotice: null,
   };
 }
 
@@ -237,6 +241,10 @@ let AI_WORKER_ENABLED = false;
 const AI_WORKER_URL = "ai-worker.js";
 // pikafish depth 18 在标准笔记本 ~5s,留充足 guard 避免误 fallback。
 const PIKAFISH_FALLBACK_GUARD_MS = 15000;
+// Pikafish 不可用时的统一通知文案 + 去重 key(#83)。
+// 用于 worker 失败 / wasm 加载失败 / worker 创建失败 / worker.onerror 等所有 fallback 路径。
+const PIKAFISH_NOTICE_KEY = "pikafish-unavailable";
+const PIKAFISH_NOTICE_TEXT = "Pikafish 引擎不可用（尚未下载或加载失败），已切换到自研 AI。";
 
 function createAIWorker() {
   if (!AI_WORKER_ENABLED) return null;
@@ -317,7 +325,10 @@ function chooseAIMoveAsync(s, callback) {
   // pikafish 强制 worker,即便 AI_WORKER_ENABLED=false
   const worker = (usePikafish || AI_WORKER_ENABLED) ? createAIWorker() : null;
   if (!worker) {
-    if (usePikafish) console.warn("pikafish mode requires Worker, falling back to sync vanilla AI");
+    if (usePikafish) {
+      console.warn("pikafish mode requires Worker, falling back to sync vanilla AI");
+      noticePikafishUnavailable_("worker unavailable");
+    }
     callback(chooseAIMove());
     return;
   }
@@ -334,6 +345,7 @@ function chooseAIMoveAsync(s, callback) {
   };
   const safetyTimer = setTimeout(() => {
     console.warn("AI worker timeout, fallback to sync");
+    if (usePikafish) noticePikafishUnavailable_("worker timeout");
     finish(chooseAIMove());
   }, fallbackGuardMs);
   worker.onmessage = (event) => {
@@ -357,18 +369,25 @@ function chooseAIMoveAsync(s, callback) {
       state.engineInfo = null;
       renderEngineInfo();
       // worker 未实现搜索时 move=null → fallback 同步搜索
+      // pikafish 模式 move=null 意味着引擎未返回走法(start 失败/bestmove (none)),
+      // 视为不可用,弹通知 + 切回 vanilla。
+      if (usePikafish && !data.move) {
+        noticePikafishUnavailable_("worker returned null move");
+      }
       finish(data.move ? data.move : chooseAIMove());
     } else if (data.type === "error") {
       clearTimeout(safetyTimer);
       state.engineInfo = null;
       renderEngineInfo();
       console.warn("AI worker error, fallback to sync:", data.error);
+      if (usePikafish) noticePikafishUnavailable_(`worker error: ${data.error || "unknown"}`);
       finish(chooseAIMove());
     }
   };
   worker.onerror = (err) => {
     clearTimeout(safetyTimer);
     console.warn("AI worker error, fallback to sync:", err && err.message);
+    if (usePikafish) noticePikafishUnavailable_(`worker.onerror: ${(err && err.message) || "unknown"}`);
     finish(chooseAIMove());
   };
   try {
@@ -376,6 +395,7 @@ function chooseAIMoveAsync(s, callback) {
   } catch (err) {
     clearTimeout(safetyTimer);
     console.warn("AI worker postMessage failed, fallback to sync:", err);
+    if (usePikafish) noticePikafishUnavailable_(`postMessage failed: ${(err && err.message) || "unknown"}`);
     finish(chooseAIMove());
   }
 }
@@ -406,6 +426,8 @@ function startGame() {
   selectedId = null;
   legalTargets = [];
   hintMove = null;
+  // createGame 已重置 state.engineNotice = null,但 DOM 上 notice 元素的 hidden 状态需要显式刷新。
+  if (typeof renderEngineNotice === "function") renderEngineNotice();
   showMessage(settings.playerSide === SIDES.RED ? "红方先行，请选择棋子。" : "你执黑，AI 红方先行。");
   saveGame();
   render();
@@ -732,6 +754,64 @@ function renderEngineInfo() {
   els.engineInfo.textContent = text;
 }
 
+// === Pikafish 不可用通知(#83)===
+// 用户切到 Pikafish 模式后,worker 失败 / wasm 缺失 / worker error 都只 console.warn,
+// 用户感受不到。本组函数提供用户级 notice:
+//   - showEngineNotice:设置 state.engineNotice 并渲染到 els.engineNotice
+//   - clearEngineNotice:清掉(切回 vanilla / new game / 用户主动关)
+//   - renderEngineNotice:与 renderEngineInfo 解耦的独立渲染
+//   - noticePikafishUnavailable_:在所有 fallback 路径中调用,弹通知 + 自动切回 vanilla + 去重
+// state.engineNotice 形如 { text, key, reason, ts },key 用于去重(同 key 不重复弹)。
+function showEngineNotice(text, opts = {}) {
+  const key = opts.key || text;
+  // 去重:相同 key 的通知不重复设置(避免每次走子都覆盖 + 闪烁)。
+  if (state.engineNotice && state.engineNotice.key === key) {
+    return false;
+  }
+  state.engineNotice = {
+    text,
+    key,
+    reason: opts.reason || null,
+    ts: Date.now(),
+  };
+  renderEngineNotice();
+  return true;
+}
+
+function clearEngineNotice() {
+  if (!state.engineNotice) return false;
+  state.engineNotice = null;
+  renderEngineNotice();
+  return true;
+}
+
+function renderEngineNotice() {
+  if (!els.engineNotice) return;
+  if (!state.engineNotice) {
+    els.engineNotice.hidden = true;
+    if (els.engineNoticeText) els.engineNoticeText.textContent = "";
+    return;
+  }
+  els.engineNotice.hidden = false;
+  if (els.engineNoticeText) els.engineNoticeText.textContent = state.engineNotice.text;
+}
+
+// pikafish 模式专属:仅当 settings.engineMode === "pikafish" 时弹通知,
+// 否则 no-op(vanilla 模式失败仍走原 fallback,但不打扰用户)。
+// 自动切回 vanilla 模式,避免每次走子都失败 + 弹。
+function noticePikafishUnavailable_(reason) {
+  if (settings.engineMode !== "pikafish") return false;
+  const changed = showEngineNotice(PIKAFISH_NOTICE_TEXT, {
+    key: PIKAFISH_NOTICE_KEY,
+    reason,
+  });
+  // 即使 notice 没变(去重命中),也仍要切回 vanilla(防止上次切回失败 / 用户手动切回 pikafish 后再次失败)。
+  settings.engineMode = "vanilla";
+  if (typeof syncSettingsUI === "function") syncSettingsUI();
+  if (typeof renderInfo === "function") renderInfo();
+  return changed;
+}
+
 function renderMoves() {
   els.moveCount.textContent = `${state.moveHistory.length} 手`;
   els.moveList.innerHTML = "";
@@ -899,11 +979,19 @@ function bindEvents() {
       const next = button.dataset.engine;
       if (next !== "vanilla" && next !== "pikafish") return;
       settings.engineMode = next;
+      // 用户主动切换视为已知,清掉之前的 pikafish 不可用通知。
+      if (typeof clearEngineNotice === "function") clearEngineNotice();
       document.querySelectorAll("[data-engine]").forEach((item) => item.classList.toggle("active", item === button));
       render();
       saveGame();
     });
   });
+  // 用户主动关 notice 按钮(#83)。
+  if (els.engineNoticeClose) {
+    els.engineNoticeClose.addEventListener("click", () => {
+      if (typeof clearEngineNotice === "function") clearEngineNotice();
+    });
+  }
 
   buttons.start.addEventListener("click", startGame);
   buttons.newGame.addEventListener("click", startGame);
