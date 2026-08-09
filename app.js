@@ -10,6 +10,7 @@ const els = {
   aiSideText: document.querySelector("#aiSideText"),
   turnText: document.querySelector("#turnText"),
   difficultyText: document.querySelector("#difficultyText"),
+  engineModeText: document.querySelector("#engineModeText"),
   message: document.querySelector("#message"),
   moveList: document.querySelector("#moveList"),
   moveCount: document.querySelector("#moveCount"),
@@ -38,7 +39,7 @@ const buttons = {
   themeToggle: document.querySelector("#themeToggle"),
 };
 
-let settings = { playerSide: SIDES.RED, difficulty: "normal", sound: true, darkBoard: false };
+let settings = { playerSide: SIDES.RED, difficulty: "normal", engineMode: "vanilla", sound: true, darkBoard: false };
 let state = createGame(settings.playerSide, settings.difficulty);
 let selectedId = null;
 let legalTargets = [];
@@ -228,10 +229,12 @@ function chooseAIMove() {
 }
 
 // Worker 工厂:在浏览器环境返回 Worker 实例,node/无 Worker 环境返回 null。
-// 当前 AI_WORKER_ENABLED = false,scheduleAI 仍走同步 chooseAIMove 路径。
-// 子任务 C 会把它打通:浏览器打开此开关 → 异步等待 worker 返回走法 → executeMove。
+// 当前 AI_WORKER_ENABLED = false,vanilla 模式仍走同步 chooseAIMove 路径。
+// pikafish 模式必须走 worker(无同步实现),createAIWorker 强制启用。
 let AI_WORKER_ENABLED = false;
 const AI_WORKER_URL = "ai-worker.js";
+// pikafish depth 18 在标准笔记本 ~5s,留充足 guard 避免误 fallback。
+const PIKAFISH_FALLBACK_GUARD_MS = 15000;
 
 function createAIWorker() {
   if (!AI_WORKER_ENABLED) return null;
@@ -244,18 +247,47 @@ function createAIWorker() {
   }
 }
 
+// 构造 worker postMessage 负载的纯函数(便于测试)。
+// vanilla 模式:发完整 v1 ctx(board+currentSide+aiDifficulty+moveHistory+snapshots)。
+// pikafish 模式:发精简 ctx(board+currentSide+aiDifficulty),worker 用 boardToFen 转 FEN 喂引擎。
+// board 是 flat 棋子数组(不是 2D 矩阵),用 cloneBoard 深拷贝;原 .map(row=>row.slice()) 是潜伏 bug,
+// 被 AI_WORKER_ENABLED=false 掩盖,#67 首次走 worker 时一并修复。
+function buildWorkerMessage(s) {
+  const ctx = {
+    board: cloneBoard(s.board),
+    currentSide: s.currentSide,
+    aiDifficulty: s.aiDifficulty,
+  };
+  if (settings.engineMode === "pikafish") {
+    return { type: "search", engine: "pikafish", ctx };
+  }
+  return {
+    type: "search",
+    ctx: {
+      ...ctx,
+      moveHistory: (s.moveHistory || []).map((m) => ({ ...m })),
+      snapshots: (s.snapshots || []).map((snap) => ({ ...snap, board: cloneBoard(snap.board) })),
+    },
+  };
+}
+
 // 异步版 AI 走法选择:浏览器若启用 Worker,走 worker-first-then-sync-fallback 路径;
 // node/无 Worker 环境直接同步 callback(chooseAIMove())。
-// 子任务 C-min:链路打通 + 安全 fallback。worker 端真正搜索逻辑在子任务 B-full 落地,
-// 在那之前 worker 会返回 move=null,触发此处 fallback 到同步搜索,行为完全不变。
+// pikafish 模式必须用 worker(worker 端 importScripts vendor/pikafish/pikafish.js)。
+// 任何 worker 失败(创建/超时/错误/null move)都 fallback 同步 chooseAIMove(),游戏不阻塞。
 function chooseAIMoveAsync(s, callback) {
-  const worker = createAIWorker();
+  const usePikafish = settings.engineMode === "pikafish";
+  // pikafish 强制 worker,即便 AI_WORKER_ENABLED=false
+  const worker = (usePikafish || AI_WORKER_ENABLED) ? createAIWorker() : null;
   if (!worker) {
+    if (usePikafish) console.warn("pikafish mode requires Worker, falling back to sync vanilla AI");
     callback(chooseAIMove());
     return;
   }
   const budget = TIME_BUDGET_MS[s.aiDifficulty] || TIME_BUDGET_MS.normal;
-  const fallbackGuardMs = budget + 1500;
+  const fallbackGuardMs = usePikafish
+    ? Math.max(budget + 1500, PIKAFISH_FALLBACK_GUARD_MS)
+    : budget + 1500;
   let settled = false;
   const finish = (move) => {
     if (settled) return;
@@ -271,12 +303,17 @@ function chooseAIMoveAsync(s, callback) {
     const data = event && event.data;
     if (!data) return;
     if (data.type === "ready") return;
+    // pikafish 启动/状态/进度消息:#70 接 UI;此处先忽略,等 result
+    if (data.type === "engine-ready" || data.type === "engine-status" || data.type === "engine-info") {
+      return;
+    }
     if (data.type === "result") {
       clearTimeout(safetyTimer);
       // worker 未实现搜索时 move=null → fallback 同步搜索
       finish(data.move ? data.move : chooseAIMove());
     } else if (data.type === "error") {
       clearTimeout(safetyTimer);
+      console.warn("AI worker error, fallback to sync:", data.error);
       finish(chooseAIMove());
     }
   };
@@ -286,16 +323,7 @@ function chooseAIMoveAsync(s, callback) {
     finish(chooseAIMove());
   };
   try {
-    worker.postMessage({
-      type: "search",
-      ctx: {
-        board: s.board.map((row) => row.slice()),
-        currentSide: s.currentSide,
-        aiDifficulty: s.aiDifficulty,
-        moveHistory: (s.moveHistory || []).map((m) => ({ ...m })),
-        snapshots: (s.snapshots || []).map((snap) => snap.board.map((row) => row.slice())),
-      },
-    });
+    worker.postMessage(buildWorkerMessage(s));
   } catch (err) {
     clearTimeout(safetyTimer);
     console.warn("AI worker postMessage failed, fallback to sync:", err);
@@ -621,7 +649,10 @@ function renderInfo() {
   els.aiSideText.textContent = sideName(opposite(state.playerSide));
   els.turnText.textContent = sideName(state.currentSide);
   els.difficultyText.textContent = { easy: "简单", normal: "普通", hard: "困难" }[state.aiDifficulty];
-  els.gameStatus.textContent = state.thinking ? "AI 思考中" : state.status === "playing" ? `${sideName(state.currentSide)}回合` : state.status === "finished" ? "已结束" : "准备开局";
+  if (els.engineModeText) {
+    els.engineModeText.textContent = settings.engineMode === "pikafish" ? "Pikafish 引擎" : "自研 AI";
+  }
+  els.gameStatus.textContent = state.thinking ? (settings.engineMode === "pikafish" ? "Pikafish 思考中" : "AI 思考中") : state.status === "playing" ? `${sideName(state.currentSide)}回合` : state.status === "finished" ? "已结束" : "准备开局";
   if (isInCheck(state.board, state.currentSide) && state.status === "playing") {
     els.gameStatus.textContent = `${sideName(state.currentSide)}被将军`;
   }
@@ -789,6 +820,17 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-engine]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const next = button.dataset.engine;
+      if (next !== "vanilla" && next !== "pikafish") return;
+      settings.engineMode = next;
+      document.querySelectorAll("[data-engine]").forEach((item) => item.classList.toggle("active", item === button));
+      render();
+      saveGame();
+    });
+  });
+
   buttons.start.addEventListener("click", startGame);
   buttons.newGame.addEventListener("click", startGame);
   [buttons.hint, buttons.hintMobile].forEach((button) => button.addEventListener("click", requestHint));
@@ -823,6 +865,7 @@ function bindEvents() {
 function syncSettingsUI() {
   document.querySelectorAll("[data-side]").forEach((button) => button.classList.toggle("active", button.dataset.side === settings.playerSide));
   document.querySelectorAll("[data-difficulty]").forEach((button) => button.classList.toggle("active", button.dataset.difficulty === settings.difficulty));
+  document.querySelectorAll("[data-engine]").forEach((button) => button.classList.toggle("active", button.dataset.engine === settings.engineMode));
   buttons.soundToggle.checked = settings.sound;
   buttons.themeToggle.checked = settings.darkBoard;
 }

@@ -45,6 +45,10 @@
             <button class="seg active" data-difficulty="normal" type="button">普通</button>
             <button class="seg" data-difficulty="hard" type="button">困难</button>
           </div>
+          <div class="segmented" aria-label="AI 引擎">
+            <button class="seg active" data-engine="vanilla" type="button">自研 AI</button>
+            <button class="seg" data-engine="pikafish" type="button">Pikafish 引擎</button>
+          </div>
           <button class="primary-button" id="startBtn" type="button">开始游戏</button>
         </section>
 
@@ -69,6 +73,10 @@
             <div>
               <span>难度</span>
               <strong id="difficultyText">普通</strong>
+            </div>
+            <div>
+              <span>引擎</span>
+              <strong id="engineModeText">自研 AI</strong>
             </div>
           </div>
           <p class="message" id="message">选择设置后开始对局。</p>
