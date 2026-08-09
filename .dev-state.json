@@ -33,7 +33,7 @@
       "hard": 4
     },
     "quiescence_depth": 3,
-    "tests_pass": 8,
+    "tests_pass": 126,
     "current_strength_estimate": "normal=新手,hard=接近三级棋士"
   },
   "push_capability": "local-only (gh auth not configured; commits stay local, user pushes manually)",
@@ -207,8 +207,18 @@
           "title": "Worker 中集成 PikafishEngine(浏览器 importScripts 加载 pikafish.js,postMessage 接口契约对齐 ai-worker.js)",
           "priority": "P0",
           "estimated_min": 25,
-          "attempts": 0,
-          "status": "pending"
+          "attempts": 1,
+          "status": "done",
+          "completed_at": "2026-08-09T10:30:00+08:00",
+          "commit_sha": "6f015d9",
+          "full_commit_sha": "6f015d96988a89677c3d31e8a38dd16a69692324",
+          "description": "ai-worker.js 重写为双模式 worker(v1 placeholder + v2 pikafish)。v1 默认:type=search 无 engine 字段 → 占位 result(move=null, 主线程 fallback)。v2 pikafish:type=search&engine=pikafish → 懒加载 PikafishEngine → position(fen) → goDepth/movetime → bestmove → uciToMove → result。新增接口:{type:engine-quit}、{type:engine-status}(返回 configured/ready/exited)、{type:engine-info} 转发 depth/score/pv(给 #70 UI 进度用)。浏览器启动 bootstrapBrowserPikafish_():importScripts pikafish-engine.js(self.PikafishEngine 自动挂载)+ importScripts vendor/pikafish/pikafish.js(self.Pikafish 设默认 loaderFactory);失败仅 warn,worker 仍可服务 v1。self.configurePikafish({EngineClass, loaderFactory, depthByDifficulty, boardToFen, uciToMove}) 测试注入接口。默认 depthByDifficulty: easy=4 / normal=10 / hard=18(对齐 success_threshold: hard 5 秒内 depth 18)。src/pikafish-engine.js 导出扩展:Worker 环境(无 window 有 self)自动挂 self.PikafishEngine/boardToFen/uciToMove/moveToUci/parseUciInfo。tests/ai-worker-pikafish.test.js 新增 17 个用例(126/126 全过):engine-ready/result/engine-info/engine-status/engine-quit 消息流,happy path(position/depth 18 hard 默认/bestmove → uciToMove → result)、depth override、easy/normal/hard 默认映射、custom depthByDifficulty、movetime 模式、engine-info 转发、engine-quit、start 失败重试、bestmove (none) → move=null、并发 singleton 复用、未配置 error、v1 默认 placeholder、非法 ctx error。",
+          "files": [
+            "ai-worker.js",
+            "src/pikafish-engine.js",
+            "tests/ai-worker-pikafish.test.js"
+          ],
+          "tests_added": 17
         },
         {
           "id": 67,
@@ -2161,6 +2171,14 @@
       "summary": "#65 vendor/pikafish 准备 + PikafishEngine wrapper + FEN 转换 + 22 测试。vendor/pikafish/{NOTICE.md, download-pikafish.sh} 含 4 source 列表 + size 验证。.gitignore 临时排除 wasm/js。src/pikafish-engine.js 实装 UCI 客户端(loader 解耦,Promise-based)+ boardToFen(xiangqi-WA 大写=红)+ moveToUci/uciToMove(a-i/0-9)+ parseUciInfo。tests/pikafish-engine.test.js 22 测试(FEN 字符表/起始局面/对称/move 双向/uci 解析/mock UCI)。109/109 tests pass(87 v1 + 22 新增),无回归。注:download-pikafish.sh 默认 source=pikafish-vue,因 official 无 wasm release;权限分类器拒下载第三方 fork 二进制,留给用户审核后执行。",
       "commit_sha": "d07c5b1",
       "full_commit_sha": "d07c5b1bf3901d9dc2bf1e9f9b1ad8652ec15793"
+    },
+    {
+      "ts": "2026-08-09T10:30:00+08:00",
+      "todo": 66,
+      "phase": "V2-1",
+      "action": "done",
+      "commit": "6f015d9",
+      "summary": "ai-worker 双模式 worker(v1 placeholder + v2 pikafish engine mode)+ 17 测试,126/126 全过"
     }
   ],
   "rules": [
@@ -2172,7 +2190,7 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "V2-1 #66:Worker 集成 PikafishEngine。需要先把 pikafish.js 在 importScripts 后挂 self.Pikafish,再实例化 PikafishEngine(loader=() => Promise.resolve(self.Pikafish))。",
+  "next_run_hint": "V2-1 #67:app.js 集成 engine mode 切换 UI(自研 AI vs Pikafish) + 默认 fallback。要点:加 settings.engineMode = 'vanilla'|'pikafish';UI 加单选/下拉;scheduleAI 在 pikafish 模式时,chooseAIMoveAsync 发 {type:'search', engine:'pikafish', ctx:{board, currentSide, aiDifficulty}};worker 收到 engine-info 时主线程更新 thinking UI(深度/nps/pv);若 worker 返回 error(pikafish 未配置 / wasm 加载失败),fallback 同步 chooseAIMove() 不阻塞游戏;默认 vanilla(v1),用户显式切到 pikafish 才用引擎。注意:pikafish.js 由用户跑 download-pikafish.sh 才有,#67 仅做 wiring,不依赖真实 wasm 也能跑测试。",
   "converged": false,
   "converged_at": null,
   "converged_reason": null,
