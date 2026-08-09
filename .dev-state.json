@@ -307,9 +307,34 @@
     {
       "id": "V2-2",
       "name": "工程化(缓存 + UI + fallback)",
-      "todo_count": 4,
+      "todo_count": 1,
       "priority": "P0",
-      "rationale": "用户体验和生产级容错"
+      "rationale": "用户体验和生产级容错",
+      "todos": [
+        {
+          "id": 83,
+          "title": "Pikafish 加载失败 → 用户级 notice + 自动切回 vanilla(V2-2 a)",
+          "priority": "P0",
+          "estimated_min": 25,
+          "attempts": 1,
+          "status": "done",
+          "completed_at": "2026-08-09T14:00:00+08:00",
+          "commit_sha": "477946e",
+          "full_commit_sha": "477946e23d3a06a44ad8e3b8a44be0cb83d4ba01",
+          "description": "V2-2 a) Pikafish 不可用 → 用户级 notice + 自动切回 vanilla。新增 showEngineNotice/clearEngineNotice/renderEngineNotice/noticePikafishUnavailable_ 4 函数 + state.engineNotice 字段(createGame 初始 null)+ PIKAFISH_NOTICE_KEY/TEXT 常量 + els.engineNotice/engineNoticeText/engineNoticeClose 元素映射。chooseAIMoveAsync 6 个 fallback 路径全接入(worker 创建失败/超时/onerror/error/null move/postMessage throw),data-engine handler + startGame 清 notice,close 按钮可手动关。去重机制:相同 key 不覆盖(避免每次走子都闪),但 mode 始终切回 vanilla 防止下次走子还失败。index.html 加 <div id='engineNotice' role='alert' hidden>(无障碍)。styles.css 警示色(red 8% bg + 36% border)。tests/app-engine-notice.test.js 18 测试全过(state 初始 null / els 映射 / show+dedup+不同 key 覆盖 / clear / render 显示+隐藏+text 缺失守卫 / noticePikafishUnavailable_ vanilla no-op + pikafish 弹+切回 + dedup 但 mode 始终切 + 不污染 engineInfo / 常量定义 / handler 主动清理 / startGame DOM 刷新)。191/192 pass(原 173 + 新增 18,1 intentional skip),无回归。",
+          "files": [
+            "app.js",
+            "index.html",
+            "styles.css",
+            "tests/app-engine-notice.test.js"
+          ],
+          "tests_added": 18,
+          "primary_value": "用户切 Pikafish 模式失败时获得明确告知 + 自动切回 vanilla,不再静默 fallback",
+          "expected_delta": "改善用户体验(避免无提示 fallback 的认知错位),非棋力维度"
+        }
+      ],
+      "status": "active",
+      "started_at": "2026-08-09T14:00:00+08:00"
     },
     {
       "id": "V2-3",
@@ -1697,6 +1722,15 @@
       "attempts": 0,
       "completed_at": null,
       "commit_sha": null
+    },
+    {
+      "id": 83,
+      "title": "Pikafish 加载失败 → 用户级 notice + 自动切回 vanilla(V2-2 a)",
+      "phase": "V2-2",
+      "priority": "P0",
+      "status": "done",
+      "completed_at": "2026-08-09T14:00:00+08:00",
+      "commit_sha": "477946e"
     }
   ],
   "history": [
@@ -2240,6 +2274,14 @@
       "action": "completed",
       "summary": "#69 real pikafish wasm smoke test(4 档 A-D)+ docs/PIKAFISH-LOADER.md。发现 pikafish-vue wasm 是 pthread-only 且不发布 pikafish.worker.js;wrapper 与 raw Emscripten 之间有 loader-contract gap(print vs onReceiveStdout,stdin vs sendCommand)。Test D 当前 skip 等 wasm 源修复。173/174 pass。",
       "commit_sha": "ecf0acf"
+    },
+    {
+      "ts": "2026-08-09T14:00:00+08:00",
+      "todo": 83,
+      "phase": "V2-2",
+      "action": "done",
+      "commit": "477946e",
+      "summary": "#83 V2-2 a) Pikafish 不可用 → 用户级 notice + 自动切回 vanilla:showEngineNotice/clearEngineNotice/renderEngineNotice/noticePikafishUnavailable_ 4 函数 + state.engineNotice 字段 + els.engineNotice 元素映射。chooseAIMoveAsync 6 fallback 路径全接入,data-engine handler + startGame 清 notice。去重(相同 key 不覆盖)+ mode 始终切回 vanilla。index.html 加 role='alert' notice div,styles.css 警示色。18 新测试全过,191/192 pass,无回归"
     }
   ],
   "rules": [
@@ -2251,7 +2293,7 @@
     "phase 1 → phase 1.5 → phase 2 → phase 3 顺序执行",
     "phase 1.5 是棋力冲刺阶段,比 phase 2/3 优先"
   ],
-  "next_run_hint": "V2-1 6/7 done(#69 实装完毕,发现 pikafish-vue wasm 不可直接驱动)。剩 #71 self-play benchmark 仍 blocked,因为需要真实可 instantiate 的 wasm(等用户决策:自写 pikafish.worker.js + wrapper stdin bridge,或切 single-threaded build,详见 docs/PIKAFISH-LOADER.md)。下一步建议推进 V2-2 工程化(P0,4 todos):a) Pikafish 加载失败时优雅降级到 v1 + 用户提示(优先,因为当前 wasm 必失败),b) Service Worker 版本升级策略(避免旧 cache 卡死),c) 移动端 worker 性能监控,d) Error reporting/Sentry 接入预备;或 V2-4 文档(P0,4 todos):README 更新 + Pikafish 来源说明 + INSTALL 步骤 + FAQ。",
+  "next_run_hint": "V2-2 启动,#83 完成(Pikafish 不可用 → 用户级 notice + 自动切回 vanilla,18 测试)。V2-2 剩余:b) Service Worker 版本升级策略(避免旧 cache 卡死)— 当 sw.js 内容变(如 #68 加 pikafish.js+wasm 到 precache),旧 client 仍持有旧 cache,CACHE_VERSION 升级触发 activate 清理,但若用户处于 stale 版本切换期,需考虑提示用户刷新;c) 移动端 worker 性能监控(pikafish depth 18 在低端手机可能 >5s,需降级 depth 或 movetime 限制);d) Error reporting/Sentry 接入预备(worker 端 window.onerror 捕获,主线程上报)。V2-1 #71 仍 blocked(等用户运行 download-pikafish.sh 或决策 wasm 源)。建议下一步:b) SW 版本升级策略(中等复杂度,纯 sw.js + 可能加 UI 刷新提示)。",
   "converged": false,
   "converged_at": null,
   "converged_reason": null,
