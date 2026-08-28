@@ -2322,9 +2322,9 @@
   ],
   "next_run_hint": "v2 cron 已自动收敛(2026-08-09)。后续每次触发 exit 立即结束。用户决策路径:推荐 B(切 single-threaded build,无 COEP 依赖,PWA 友好)。完成后改 .dev-state.json: converged=false + 加 V2-1.5 phase(loader bridge 适配)。详见 docs/V2-AUTOMATION-BOUNDARY.md。",
   "converged": true,
-  "converged_at": "2026-08-09T13:49:14+08:00",
-  "converged_reason": "v2 自动化能力到边界,等待用户决策。V2-1 phase 全部 7/7 done(206/207 tests pass + 1 skip on pikafish real UCI handshake),V2-2 a) #83 done(用户级 notice + 自动 fallback)。但 v2 真实棋力目标(Elo 2600+)被 pikafish loader-contract gap 阻塞:(1) vendor/pikafish/pikafish.{js,wasm} 是 pthread-only build,缺 pikafish.worker.js;(2) Node worker_threads 不支持 importScripts,Node 路径(benchmark/真实测试)无解;(3) 浏览器路径需 COOP/COEP + 自写 bootstrap;(4) Emscripten module 无 sendCommand API,wrapper 需内建 stdin bridge(~80 行)。剩余 V2-2 b/c/d todos 是纯工程外围(0 Elo delta),V2-3 opening book/多线程 依赖 pikafish 真实运行,V2-4 文档等真实数据。继续 cron 自动化边际价值 < convergence_min_delta_percent=10% → 收敛。用户决策路径(B 切 single-threaded build / C 自编译 + COEP)详见 docs/V2-AUTOMATION-BOUNDARY.md。恢复 cron 的条件:用户切换 wasm 源后改 converged=false + 加 V2-1.5 phase。",
-  "cron_status": "deleted (was 8d7ccf33, removed 2026-08-09)",
+  "converged_at": "2026-08-09T18:10:30+08:00",
+  "converged_reason": "v2 中止,pivot 到 v3(fork billzi2016)。详见 v3_plan 字段。",
+  "cron_status": "all v1/v2 crons deleted. v3 dev mode TBD by user.",
   "v1_release_ready": true,
   "v1_summary": {
     "tag": "v1.0.0",
@@ -2380,5 +2380,47 @@
       "delta_vs_previous": null,
       "notes": "V2-1 完成全部 7 todos(下载脚本/wrapper/worker/UI/SW/smoke/进度/benchmark framework),pikafish 真实运行被 loader-contract gap(pthread-only build + Node worker_threads 无 importScripts + Emscripten 无 sendCommand API)阻塞。Elo 实测不可行。详见 docs/V2-AUTOMATION-BOUNDARY.md。"
     }
-  ]
+  ],
+  "v2_summary": {
+    "started_at": "2026-08-09",
+    "abandoned_at": "2026-08-09T18:10:30+08:00",
+    "abandonment_reason": "v2 cron 把 Pikafish 集成当 7 个 TODO,严重低估复杂度。实际发现 Pikafish WASM 不只是 .js + .wasm 两个文件,需要:(1) NNUE 网络文件(51MB)决定棋力(2) coi-serviceworker.js 注入 COOP/COEP 让 SharedArrayBuffer 可用(3) Web Worker 架构(postMessage 异步通信)(4) 本地静态 server 配 COOP/COEP headerscron 做了 5/7 TODO 但都没打通真实 Pikafish。继续是浪费时间。",
+    "completed_useful_work": [
+      "src/pikafish-engine.js(UCI wrapper,Promise 化)",
+      "src/fen.js(FEN 序列化,可复用)",
+      "ai-worker 双模式架构(v1/v2 切换,设计有参考价值)",
+      "Service Worker 缓存(可复用)",
+      "UI 进度反馈(可复用)"
+    ],
+    "converged": false,
+    "pivoted_to": "v3-fork-billzi2016"
+  },
+  "v3_plan": {
+    "strategy": "fork billzi2016/Chinese-Chess-AI-Pro 为 base,把 v1 的 UX/棋盘样式/棋谱功能 merge 进去",
+    "rationale": "billzi2016 已跑通 Pikafish 完整集成(pthread + NNUE + COI + Worker 桥接),自己集成等于重做他做的事。fork 改造快 10 倍。",
+    "v3_repo_path": "/home/robertsong/workspace/claude-2/chinese-chess-v3",
+    "v3_upstream": "https://github.com/billzi2016/Chinese-Chess-AI-Pro",
+    "v3_total_size": "105 MB(主要是 51MB NNUE + 2.3MB Pikafish 源码)",
+    "v3_already_has": [
+      "Pikafish WASM + Worker(棋圣级棋力)",
+      "NNUE 评估网络",
+      "COI service worker(GitHub Pages 支持 SharedArrayBuffer)",
+      "本地 server.py(COOP/COEP)",
+      "UI(棋盘 + 走子 + 评估面板)",
+      "完整 CSS 架构(tokens + components)",
+      "spec + test 框架"
+    ],
+    "v1_assets_to_merge": [
+      "你 v1 的棋盘视觉风格(styles.css 10KB)",
+      "棋谱导出功能(exportBtn)",
+      "悔棋 / 认输 / 提示按钮",
+      "深色棋盘主题",
+      "音效",
+      "移动端响应式优化",
+      "中文 UI 文案",
+      "session 持久化(localStorage)"
+    ],
+    "converged": false,
+    "next_step": "等用户决定:(a) 起 v3 dev cron 自动 merge;(b) 手动逐项 merge;(c) 跑起来看效果再说"
+  }
 }
